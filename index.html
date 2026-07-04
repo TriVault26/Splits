@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPLITS. — the honest race calculator</title>
+<meta name="description" content="Triathlon and single-sport pacing: a goal in — every pace, split and hard truth out.">
+<meta name="theme-color" content="#14171A">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="SPLITS.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="mast">
+    <div class="mast-row"><h1>Splits<span class="dot">.</span></h1><span class="ver">Beta</span></div>
+    <p>The honest race calculator. A goal in — every pace, split and hard truth out.</p>
+  </header>
+
+  <div class="unitsrow">
+    <span class="ul">Units</span>
+    <div class="upills" data-k="dist"><button data-v="km" aria-selected="true">km</button><button data-v="mi" aria-selected="false">mi</button></div>
+    <span class="ul">Pool</span>
+    <div class="upills" data-k="pool"><button data-v="m" aria-selected="true">m</button><button data-v="yd" aria-selected="false">yd</button></div>
+    
+  </div>
+
+  <div class="modetoggle" id="modetoggle" role="tablist">
+    <button role="tab" data-m="solo" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4v16M7 8v8M19 8v8"/></svg>Single sport</button>
+    <button role="tab" data-m="tri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M4.9 6l2.8 2.8M2 13h4M18 8.8 20.8 6M18 13h4M12 22a6 6 0 0 0 0-12 6 6 0 0 0 0 12Z"/></svg>Triathlon</button>
+  </div>
+
+  <!-- ============================ SINGLE SPORT ============================ -->
+  <div id="mode-solo" class="sport-run">
+    <div class="seg" id="sportseg" role="tablist">
+      <button role="tab" data-s="run" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="5" r="2"/><path d="M9 21l2-4 3 1 1 3M6 12l3-3 4 1 2 3 3 1"/><path d="m9 9-3 2-2-2"/></svg>Run</button>
+      <button role="tab" data-s="swim"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16c1.5 0 1.5 1 3 1s1.5-1 3-1 1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1"/><path d="M2 20c1.5 0 1.5 1 3 1s1.5-1 3-1 1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1"/><circle cx="17" cy="7" r="2"/><path d="m5 13 4-2 3 2 3-4"/></svg>Swim</button>
+      <button role="tab" data-s="bike"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/><path d="M12 17.5 8.5 9l5-1 2 3.5H18"/></svg>Bike</button>
+    </div>
+    <section class="card">
+      <div class="card-body">
+        <div class="goal-t" id="goalt">Goal</div>
+        <div class="chips" id="chips"></div>
+        <div class="goalrow">
+          <div class="gf"><label id="gflabel">Goal time</label><input id="gtime" inputmode="numeric"></div>
+          <div class="badge"><span class="bk" id="badgek">VDOT</span><span class="bv" id="badgev">–</span></div>
+        </div>
+        <div id="modelwrap"></div>
+        <div class="seclabel">Equivalents <span class="n" id="eqnote"></span></div>
+        <div class="band" id="equiv"></div>
+        <details class="reveal" id="rvPaces"><summary><span class="rvt" id="rvPacesT">Training paces</span><span class="plus"></span></summary><div class="rv-body"><div id="secondary"></div></div></details>
+        <details class="reveal"><summary><span class="rvt">Session targets</span><span class="plus"></span></summary><div class="rv-body"><div class="seclabel" id="replabel">Rep targets</div><div id="reps"></div></div></details>
+        <details class="reveal"><summary><span class="rvt">Pace band</span><span class="plus"></span></summary><div class="rv-body"><div class="spctl" id="splitsui"></div><div class="spsum" id="splitsum"></div><div class="band" id="splitstbl"></div></div></details>
+      </div>
+    </section>
+    <p class="foot" id="soloFoot"></p>
+  </div>
+
+  <!-- ============================ TRIATHLON ============================ -->
+  <div id="mode-tri" class="hide">
+    <section class="card hero">
+      <div class="card-head">
+        <span class="glyph"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V4h13l-2 4 2 4H4"/><path d="M4 21v-4"/></svg></span>
+        <div class="eyebrow">Race sheet<small>your goal, reality-checked</small></div>
+      </div>
+      <div class="card-body">
+        <div class="seg tri" id="distseg" role="tablist">
+          <button role="tab" data-d="Sprint">Sprint</button><button role="tab" data-d="Olympic">Olympic</button>
+          <button role="tab" data-d="70.3">70.3</button><button role="tab" data-d="Ironman">Ironman</button>
+        </div>
+        <div class="goalrow" style="margin-bottom:14px">
+          <div class="gf"><label>Goal finish</label><input id="trigoal" inputmode="numeric" placeholder="5:15:00" style="border-color:var(--ink)"></div>
+          <p class="hintline" style="flex:1;min-width:170px;margin:0 0 6px">Type a target — the legs fill in. Adjust any leg; the total tracks your goal.</p>
+        </div>
+        <div class="legs" id="legs"></div>
+        <p class="hintline">Type digits — 11000 becomes 1:10:00.</p>
+        <details class="reveal" id="rvVerdict"><summary><span class="rvt">The verdict</span><span class="plus"></span><span class="rvs" id="synth">Add your numbers to check this goal.</span></summary><div class="rv-body">
+        <div class="panel">
+          <div class="panel-t">Your numbers today</div>
+          <div class="pg">
+            <div class="mf"><label>5 k run</label><input id="cf5k" value="22:30" inputmode="numeric"></div>
+            <div class="mf sm"><label>400 swim</label><input id="cf400" value="6:24" inputmode="numeric"></div>
+            <div class="mf sm"><label>200 swim</label><input id="cf200" value="3:00" inputmode="numeric"></div>
+            <div class="mf sm"><label>FTP w</label><input id="cftp" value="225" inputmode="numeric"></div>
+          </div>
+        </div>
+        <details class="set" id="setblock">
+          <summary><span>Conditions & bike model</span><span class="sum" id="setsum"></span></summary>
+          <div class="set-body">
+            <div class="pg">
+              <div class="mf"><label>Swim</label><select id="swimcond"><option>Pool</option><option selected>OW wetsuit</option><option>OW skin</option></select></div>
+              <div class="mf sm"><label>Weeks to race</label><input id="weeks" value="20" inputmode="numeric"></div>
+            </div>
+            <div class="pg">
+              <div class="mf"><label>Bike position</label><select id="bmpos"><option>Road tops</option><option>Road hoods</option><option>Road drops</option><option selected>Tri aero</option><option>TT optimised</option></select></div>
+              <div class="mf sm"><label>Rider+bike kg</label><input id="bmmass" value="78" inputmode="numeric"></div>
+              <div class="mf sm"><label>Grade %</label><input id="bmgrade" value="0" inputmode="numeric"></div>
+              <div class="mf sm"><label>Wind km/h</label><input id="bmwind" value="0" inputmode="numeric"></div>
+              <div class="mf sm"><label>Altitude m</label><input id="bmalt" value="0" inputmode="numeric"></div>
+            </div>
+          </div>
+        </details>
+          <div class="rvsec">The gap</div>
+          <div class="grid3" id="gapgrid"></div>
+          <div id="couple"></div>
+          <div id="cutoffs"></div>
+        </div></details>
+        <details class="reveal"><summary><span class="rvt">Checkpoints</span><span class="plus"></span></summary><div class="rv-body"><div class="grid3" id="splitgrid"></div></div></details>
+        <details class="reveal"><summary><span class="rvt">Train at</span><span class="plus"></span></summary><div class="rv-body"><div class="grid3" id="reqgrid"></div></div></details>
+      </div>
+    </section>
+
+    <details class="reveal"><summary><span class="rvt">Training zones</span><span class="plus"></span><span class="rvs">Reference paces &amp; power from the fitness above.</span></summary><div class="rv-body">
+
+    <section class="card swim">
+      <div class="card-head"><span class="glyph"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16c1.5 0 1.5 1 3 1s1.5-1 3-1 1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1"/><path d="M2 20c1.5 0 1.5 1 3 1s1.5-1 3-1 1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1"/><circle cx="17" cy="7" r="2"/><path d="m5 13 4-2 3 2 3-4"/></svg></span><div class="eyebrow">Swim<small>CSS · from your TTs</small></div></div>
+      <div class="card-body">
+        <div class="seclabel2">Thresholds</div>
+        <div class="band">
+          <div class="row"><div class="lab"><b>CSS pace</b><span>your swim threshold</span></div><div class="val" id="css">–<small> /100</small></div></div>
+          <div class="row"><div class="lab"><b>1500 m at CSS</b><span>steady threshold effort</span></div><div class="val" id="s1500">–</div></div>
+        </div>
+        <div class="seclabel2">Rep targets <span style="font-weight:400;color:var(--muted)">· send-off includes rest</span></div>
+        <div class="band" id="swimreps"></div>
+      </div>
+    </section>
+
+    <section class="card bike">
+      <div class="card-head"><span class="glyph"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/><path d="M12 17.5 8.5 9l5-1 2 3.5H18"/></svg></span><div class="eyebrow">Bike<small>FTP · power zones</small></div></div>
+      <div class="card-body">
+        <div class="seclabel2">Speed ⇄ power <span style="font-weight:400;color:var(--muted)">· uses your bike model</span></div>
+        <div class="conv">
+          <div class="cf"><label>Power w</label><input id="cvpow" value="250" inputmode="numeric"></div>
+          <span class="swap">⇄</span>
+          <div class="cf"><label>Speed km/h</label><input id="cvspd" value="" inputmode="numeric"></div>
+          <span class="cout" id="cvout"></span>
+        </div>
+        <div class="seclabel2">Power zones <span style="font-weight:400;color:var(--muted)">· Coggan</span></div>
+        <div class="band" id="bikezones"></div>
+        <div class="seclabel2">Rep targets</div>
+        <div class="band" id="bikereps"></div>
+      </div>
+    </section>
+
+    <section class="card run">
+      <div class="card-head"><span class="glyph"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="5" r="2"/><path d="M9 21l2-4 3 1 1 3M6 12l3-3 4 1 2 3 3 1"/><path d="m9 9-3 2-2-2"/></svg></span><div class="eyebrow">Run<small>VDOT · Daniels</small></div></div>
+      <div class="card-body">
+        <div class="seclabel2">Training paces <span style="font-weight:400;color:var(--muted)">· open-run / km</span></div>
+        <div class="band" id="runpaces"></div>
+        <div class="seclabel2">Interval reps <span style="font-weight:400;color:var(--muted)">· VO₂ 400–1200</span></div>
+        <div class="reps" id="runI"></div>
+        <div class="seclabel2">Speed reps <span style="font-weight:400;color:var(--muted)">· R pace 200–400</span></div>
+        <div class="reps" id="runR"></div>
+      </div>
+    </section>
+
+    </div></details>
+
+    <p class="foot">Estimates, not a coach — calibrate the rates and penalties to the athlete in front of you.</p>
+  </div>
+
+</div>
+
+<script src="app.js" defer></script>
+</body>
+</html>
