@@ -14,82 +14,82 @@
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: none; }
   html, body { overflow: hidden; height: 100%; width: 100%; position: fixed; top: 0; left: 0; overscroll-behavior: none; }
   body {
-    background: radial-gradient(ellipse at top, #1a2f4a 0%, #0a1628 70%);
+    background: #0a1628;
     color: #fff;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    display: flex; flex-direction: column; align-items: center;
-    padding: 6px;
     touch-action: none;
     user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
   }
-  .hud {
-    width: 100%; max-width: 500px;
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
-    padding: 8px;
-    background: rgba(255,255,255,0.06);
-    backdrop-filter: blur(10px);
-    border-radius: 12px;
-    margin-bottom: 6px;
-    border: 1px solid rgba(255,255,255,0.08);
-  }
-  .stat { text-align: center; }
-  .stat .label { opacity: 0.55; font-size: 9px; text-transform: uppercase; letter-spacing: 1.1px; font-weight: 600; }
-  .stat .value { font-size: 18px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
-  .stat .value.score-over { color: #ff9b9b; }
-  .stat .value.score-under { color: #a7f3d0; }
-  canvas {
-    border-radius: 12px;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-    display: block;
+  canvas#game {
+    position: fixed; inset: 0;
+    width: 100vw; height: 100vh; height: 100dvh;
+    display: block; z-index: 0;
     touch-action: none;
   }
-  .shotinfo {
-    margin-top: 6px;
-    width: 100%; max-width: 500px;
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 6px 12px;
-    background: rgba(255,255,255,0.05);
-    border-radius: 10px;
-    font-size: 12px;
-    border: 1px solid rgba(255,255,255,0.08);
+  /* Top HUD — overlaid on the canvas */
+  .hud {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+    padding: 8px 12px;
+    padding-top: calc(8px + env(safe-area-inset-top));
+    background: linear-gradient(to bottom, rgba(6,14,26,0.72), rgba(6,14,26,0));
+    pointer-events: none;
   }
-  .shotinfo .left { opacity: 0.85; }
-  .shotinfo .right { font-weight: 700; color: #a7f3d0; }
+  .stat { text-align: center; }
+  .stat .label { opacity: 0.6; font-size: 9px; text-transform: uppercase; letter-spacing: 1.1px; font-weight: 600; }
+  .stat .value { font-size: 19px; font-weight: 800; margin-top: 2px; font-variant-numeric: tabular-nums; text-shadow: 0 1px 4px rgba(0,0,0,0.6); }
+  .stat .value.score-over { color: #ff9b9b; }
+  .stat .value.score-under { color: #a7f3d0; }
+  /* Bottom dock — shot info, clubs, controls overlaid on the canvas */
+  .dock {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, rgba(6,14,26,0.9) 55%, rgba(6,14,26,0));
+  }
+  .shotinfo {
+    width: 100%; max-width: 560px;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 14px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .shotinfo .left { font-size: 13px; opacity: 0.9; }
+  .shotinfo .right { font-weight: 800; font-size: 15px; color: #a7f3d0; text-align: right; }
+  .shotinfo .right .rydg { font-size: 11px; opacity: 0.7; font-weight: 600; }
   .clubrack {
-    margin-top: 6px;
-    width: 100%; max-width: 500px;
+    width: 100%; max-width: 560px;
     display: grid; grid-template-columns: repeat(8, 1fr);
-    gap: 3px;
-    padding: 4px;
-    background: rgba(255,255,255,0.05);
-    border-radius: 10px;
-    border: 1px solid rgba(255,255,255,0.08);
+    gap: 5px;
   }
   .club-btn {
-    padding: 6px 2px;
+    padding: 10px 2px 8px;
     border: none;
-    border-radius: 7px;
-    background: rgba(255,255,255,0.08);
+    border-radius: 11px;
+    background: rgba(255,255,255,0.09);
     color: white;
-    font-weight: 700;
-    font-size: 11px;
+    font-weight: 800;
+    font-size: 14px;
     cursor: pointer;
-    border: 1px solid transparent;
-    transition: transform 0.1s, background 0.15s, border-color 0.15s;
-    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    border: 2px solid transparent;
+    transition: transform 0.12s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    min-height: 52px; justify-content: center;
   }
-  .club-btn .ydg { font-size: 9px; opacity: 0.55; font-weight: 500; }
-  .club-btn:active { transform: scale(0.94); }
+  .club-btn .ydg { font-size: 10px; opacity: 0.6; font-weight: 600; }
+  .club-btn:active { transform: scale(0.92); }
   .club-btn.selected {
-    background: linear-gradient(135deg, #4a9eff, #2563eb);
-    border-color: rgba(255,255,255,0.2);
-    box-shadow: 0 2px 10px rgba(74,158,255,0.35);
+    background: linear-gradient(135deg, #5aa8ff, #2563eb);
+    border-color: #cfe6ff;
+    box-shadow: 0 0 0 2px rgba(90,168,255,0.35), 0 4px 16px rgba(74,158,255,0.5);
+    transform: translateY(-4px) scale(1.06);
   }
-  .club-btn.selected .ydg { opacity: 0.9; }
-  .club-btn:disabled { opacity: 0.3; pointer-events: none; }
-  .bottom-bar { margin-top: 6px; display: flex; gap: 6px; width: 100%; max-width: 500px; justify-content: center; }
-  button.sys { padding: 8px 16px; border: none; border-radius: 9px; background: rgba(255,255,255,0.08); color: white; font-weight: 600; font-size: 12px; cursor: pointer; border: 1px solid rgba(255,255,255,0.1); }
-  button.sys:active { transform: scale(0.96); background: rgba(255,255,255,0.15); }
+  .club-btn.selected .ydg { opacity: 0.95; }
+  .club-btn:disabled { opacity: 0.28; pointer-events: none; }
+  .bottom-bar { display: flex; gap: 8px; width: 100%; max-width: 560px; justify-content: center; }
+  button.sys { padding: 9px 18px; border: none; border-radius: 10px; background: rgba(255,255,255,0.1); color: white; font-weight: 600; font-size: 13px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); }
+  button.sys:active { transform: scale(0.96); background: rgba(255,255,255,0.18); }
   button.primary { padding: 12px 28px; border: none; border-radius: 12px; background: linear-gradient(135deg, #4a9eff, #2563eb); color: white; font-weight: 700; font-size: 15px; cursor: pointer; border: 1px solid transparent; box-shadow: 0 4px 14px rgba(74,158,255,0.35); }
   button.primary:active { transform: scale(0.96); }
   .overlay {
@@ -154,14 +154,16 @@
     <div class="stat"><div class="label">Total</div><div class="value" id="total">E</div></div>
   </div>
   <canvas id="game"></canvas>
-  <div class="shotinfo">
-    <div class="left" id="shotInfoLeft">— yds to pin</div>
-    <div class="right" id="shotInfoRight">— selected</div>
-  </div>
-  <div class="clubrack" id="clubRack"></div>
-  <div class="bottom-bar">
-    <button class="sys" id="retry">↻ Retee</button>
-    <button class="sys" id="skip">Skip →</button>
+  <div class="dock">
+    <div class="shotinfo">
+      <div class="left" id="shotInfoLeft">— yds to pin</div>
+      <div class="right" id="shotInfoRight">— selected</div>
+    </div>
+    <div class="clubrack" id="clubRack"></div>
+    <div class="bottom-bar">
+      <button class="sys" id="retry">↻ Retee</button>
+      <button class="sys" id="skip">Skip →</button>
+    </div>
   </div>
   <div class="hole-banner" id="banner">
     <div class="tiny" id="bannerTiny"></div>
@@ -219,9 +221,16 @@ const PUTTER_MAX_VEL_YPF = 1.8;   // yards per frame at full power
 // Lighting direction for 3D shading (normalized, top-left to bottom-right)
 const LIGHT_X = -0.55, LIGHT_Y = -0.55;
 
-// 3-D perspective view (TV camera behind the ball)
-const FOCAL = 430;        // focal length in px — larger = more telephoto
-const HORIZON = 160;      // screen y of the horizon line
+// 3-D perspective view (TV camera behind the ball). Screen dims (CW/CH),
+// focal length and horizon are all recomputed for the device in fitCanvas,
+// so the scene fills the whole viewport at its native aspect ratio.
+// W/H stay the 500x700 WORLD coordinate space (physics, holes, minimap).
+let CW = 500, CH = 700;   // canvas pixel resolution (device viewport * DPR)
+let FOCAL = 430;          // focal length in px — scales with CW to hold FOV
+let HORIZON = 200;        // screen y of the horizon line
+let US = 1;               // in-canvas UI scale (widgets, meter, minimap)
+const FOCAL_FACTOR = 0.86;
+const HORIZON_FRAC = 0.30;
 const NEARZ = 6;          // near clip plane (world px in front of camera)
 const SKIES = {
   default: { top:'#3f8fdc', bot:'#a8d4ef', haze:'#d7ecf7', ridge:'#2a5c38' },
@@ -663,11 +672,18 @@ function updateStatsLines() {
 }
 
 function fitCanvas() {
-  const availH = window.innerHeight - 240;
-  const availW = Math.min(window.innerWidth - 12, 540);
-  const scale = Math.min(availW / W, availH / H, 1);
-  canvas.style.width  = (W * scale) + 'px';
-  canvas.style.height = (H * scale) + 'px';
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  // Draw in CSS-pixel space (CW x CH); scale the backing store by DPR for crispness.
+  CW = vw; CH = vh;
+  canvas.width = Math.round(vw * dpr);
+  canvas.height = Math.round(vh * dpr);
+  canvas.style.width = vw + 'px';
+  canvas.style.height = vh + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  FOCAL = CW * FOCAL_FACTOR;
+  HORIZON = Math.round(CH * HORIZON_FRAC);
+  US = CH / 700;
 }
 window.addEventListener('resize', fitCanvas);
 window.addEventListener('orientationchange', fitCanvas);
@@ -679,8 +695,8 @@ function lerp(a, b, t) { return a + (b - a) * t; }
 function canvasPoint(e) {
   const rect = canvas.getBoundingClientRect();
   return {
-    x: (e.clientX - rect.left) * (W / rect.width),
-    y: (e.clientY - rect.top)  * (H / rect.height)
+    x: (e.clientX - rect.left) * (CW / rect.width),
+    y: (e.clientY - rect.top)  * (CH / rect.height)
   };
 }
 function hashRand(x, y, seed) {
@@ -1205,7 +1221,9 @@ function updateShotInfo() {
               : terr === 'green' ? ' · on green'
               : ' · fairway';
   document.getElementById('shotInfoLeft').textContent = `${yToPin} yds${lieStr}`;
-  document.getElementById('shotInfoRight').textContent = club.isPutter ? 'Putter' : `${club.n} · ${club.y}y`;
+  document.getElementById('shotInfoRight').innerHTML = club.isPutter
+    ? 'Putter'
+    : `${club.n} <span class="rydg">${club.y}y</span>`;
 }
 function renderClubRack() {
   const rack = document.getElementById('clubRack');
@@ -1337,7 +1355,7 @@ function proj(wx, wy, e) {
   if (z < NEARZ) return null;
   const l = dx * cam.rx + dy * cam.ry;
   const s = FOCAL / z;
-  return { x: W / 2 + l * s, y: HORIZON + (cam.h - (e || 0)) * s, s, z };
+  return { x: CW / 2 + l * s, y: HORIZON + (cam.h - (e || 0)) * s, s, z };
 }
 // Project polygon with near-plane clipping. pts: [{x, y, e?}] → [{x,y}] or null.
 function projectPoly(pts) {
@@ -1358,7 +1376,7 @@ function projectPoly(pts) {
   if (out.length < 3) return null;
   return out.map(c => {
     const s = FOCAL / c.z;
-    return { x: W / 2 + c.l * s, y: HORIZON + (cam.h - c.e) * s };
+    return { x: CW / 2 + c.l * s, y: HORIZON + (cam.h - c.e) * s };
   });
 }
 function pathPoly(sp) {
@@ -1573,24 +1591,12 @@ function draw() {
     ctx.save();
     ctx.globalAlpha = (waterFlashTimer / 22) * 0.5;
     ctx.fillStyle = '#6bb2ff';
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(0, 0, CW, CH);
     ctx.restore();
   }
 
   drawWindWidget();
   drawMinimap(h);
-
-  // Corner label
-  ctx.save();
-  ctx.globalAlpha = 0.5;
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 11px -apple-system, sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText(`${h.course.toUpperCase()} · #${h.holeNum}`, W - 12, 18);
-  ctx.font = '10px -apple-system, sans-serif';
-  ctx.globalAlpha = 0.36;
-  ctx.fillText(`${h.holeName.toUpperCase()} · ${h.yards}Y · PAR ${h.par}`, W - 12, 32);
-  ctx.restore();
 }
 
 function drawSky3D(sky) {
@@ -1598,46 +1604,49 @@ function drawSky3D(sky) {
   grd.addColorStop(0, sky.top);
   grd.addColorStop(1, sky.bot);
   ctx.fillStyle = grd;
-  ctx.fillRect(0, 0, W, HORIZON + 1);
+  ctx.fillRect(0, 0, CW, HORIZON + 1);
   // Sun glow top-left (matches LIGHT_X/LIGHT_Y)
   ctx.save();
-  const sun = ctx.createRadialGradient(92, 42, 4, 92, 42, 120);
+  const sunX = CW * 0.2, sunY = HORIZON * 0.24, sunR = 160 * US;
+  const sun = ctx.createRadialGradient(sunX, sunY, 4 * US, sunX, sunY, sunR);
   sun.addColorStop(0, 'rgba(255,250,220,0.85)');
   sun.addColorStop(0.25, 'rgba(255,246,200,0.28)');
   sun.addColorStop(1, 'rgba(255,246,200,0)');
   ctx.fillStyle = sun;
-  ctx.fillRect(0, 0, W, HORIZON);
+  ctx.fillRect(0, 0, CW, HORIZON);
   // Clouds
   for (const c of clouds) {
-    const sy = 26 + (c.y / H) * (HORIZON - 88);
-    const r = c.r * 0.55;
+    const cx = (c.x / W) * CW;
+    const sy = HORIZON * 0.16 + (c.y / H) * (HORIZON * 0.5);
+    const r = c.r * 0.55 * US;
     ctx.fillStyle = 'rgba(255,255,255,0.66)';
-    ctx.beginPath(); ctx.ellipse(c.x, sy, r, r * 0.34, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(c.x + r * 0.5, sy + 2, r * 0.62, r * 0.26, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(c.x - r * 0.55, sy + 1, r * 0.5, r * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx, sy, r, r * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + r * 0.5, sy + 2, r * 0.62, r * 0.26, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx - r * 0.55, sy + 1, r * 0.5, r * 0.22, 0, 0, Math.PI * 2); ctx.fill();
   }
   // Distant tree ridge on the horizon
   ctx.fillStyle = sky.ridge;
   ctx.globalAlpha = 0.55;
   ctx.beginPath();
   ctx.moveTo(0, HORIZON + 1);
-  for (let x = 0; x <= W; x += 18) {
-    const yy = HORIZON - 3 - hashRand(x, currentHole, 5) * 9 - Math.sin(x * 0.02 + currentHole * 2) * 4;
+  const step = 18 * US;
+  for (let x = 0; x <= CW; x += step) {
+    const yy = HORIZON - (3 + hashRand(x, currentHole, 5) * 9 + Math.sin(x * 0.02 + currentHole * 2) * 4) * US;
     ctx.lineTo(x, yy);
   }
-  ctx.lineTo(W, HORIZON + 1);
+  ctx.lineTo(CW, HORIZON + 1);
   ctx.closePath();
   ctx.fill();
   ctx.restore();
 }
 
 function drawGround3D(theme, sky) {
-  const grd = ctx.createLinearGradient(0, HORIZON, 0, H);
+  const grd = ctx.createLinearGradient(0, HORIZON, 0, CH);
   grd.addColorStop(0, lightenColor(shadeColor(theme.top, 0.05), 0.16));
   grd.addColorStop(0.22, shadeColor(theme.top, 0.10));
   grd.addColorStop(1, shadeColor(theme.bot, 0.14));
   ctx.fillStyle = grd;
-  ctx.fillRect(0, HORIZON, W, H - HORIZON);
+  ctx.fillRect(0, HORIZON, CW, CH - HORIZON);
   // Rough mottling blobs, projected
   ctx.save();
   for (const m of holeGeo.mottle) {
@@ -1660,7 +1669,7 @@ function drawFairway3D(theme) {
   const sp = projectPoly(holeGeo.ribbon);
   if (!sp) return;
   ctx.save();
-  const grd = ctx.createLinearGradient(0, HORIZON, 0, H);
+  const grd = ctx.createLinearGradient(0, HORIZON, 0, CH);
   grd.addColorStop(0, lightenColor(theme.top, 0.06));
   grd.addColorStop(1, theme.bot);
   ctx.fillStyle = grd;
@@ -1873,12 +1882,13 @@ function drawCup3D(x, y) {
 
 function drawHaze3D(sky) {
   ctx.save();
-  const g = ctx.createLinearGradient(0, HORIZON, 0, HORIZON + 74);
+  const band = 74 * US;
+  const g = ctx.createLinearGradient(0, HORIZON, 0, HORIZON + band);
   g.addColorStop(0, sky.haze + '');
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.globalAlpha = 0.5;
   ctx.fillStyle = g;
-  ctx.fillRect(0, HORIZON, W, 74);
+  ctx.fillRect(0, HORIZON, CW, band);
   ctx.restore();
 }
 
@@ -2342,35 +2352,36 @@ function drawAim3D() {
 // MINIMAP OVERLAY
 // ============================================================
 function drawMinimap(h) {
-  const mw = 86, mh = 120, mx = 10, my = H - mh - 14;
+  const mw = 92 * US, mh = 128 * US, mx = 12 * US, my = CH * 0.80 - mh;
+  const pad = 3 * US, rad = 7 * US;
   ctx.save();
   ctx.globalAlpha = 0.93;
-  roundRect(ctx, mx - 3, my - 3, mw + 6, mh + 6, 8);
+  roundRect(ctx, mx - pad, my - pad, mw + pad * 2, mh + pad * 2, rad);
   ctx.fillStyle = 'rgba(6,16,10,0.78)';
   ctx.fill();
-  roundRect(ctx, mx, my, mw, mh, 5);
+  roundRect(ctx, mx, my, mw, mh, rad * 0.7);
   ctx.clip();
   ctx.drawImage(miniLayer, mx, my, mw, mh);
   // View direction from ball
   const bx = mx + (ball.x / W) * mw, by = my + (ball.y / H) * mh;
   ctx.strokeStyle = 'rgba(255,255,255,0.65)';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1.4 * US;
   ctx.beginPath();
   ctx.moveTo(bx, by);
-  ctx.lineTo(bx + cam.fx * 12, by + cam.fy * 12);
+  ctx.lineTo(bx + cam.fx * 14 * US, by + cam.fy * 14 * US);
   ctx.stroke();
   // Ball + pin dots
   ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.arc(bx, by, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(bx, by, 2.6 * US, 0, Math.PI * 2); ctx.fill();
   const px = mx + (h.hole.x / W) * mw, py = my + (h.hole.y / H) * mh;
   ctx.fillStyle = '#ff4040';
-  ctx.beginPath(); ctx.arc(px, py, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(px, py, 2.6 * US, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
   ctx.save();
   ctx.globalAlpha = 0.5;
   ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-  ctx.lineWidth = 1;
-  roundRect(ctx, mx - 3, my - 3, mw + 6, mh + 6, 8);
+  ctx.lineWidth = 1 * US;
+  roundRect(ctx, mx - pad, my - pad, mw + pad * 2, mh + pad * 2, rad);
   ctx.stroke();
   ctx.restore();
 }
@@ -2398,7 +2409,8 @@ function drawCloudShadows() {
 }
 
 function drawWindWidget() {
-  const cx = 38, cy = 52, r = 22;
+  const r = 26 * US;
+  const cx = 18 * US + r, cy = CH * 0.075 + r;
   ctx.save();
   // Backing panel
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
@@ -2406,7 +2418,7 @@ function drawWindWidget() {
   ctx.arc(cx, cy, r, 0, Math.PI*2);
   ctx.fill();
   ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1 * US;
   ctx.stroke();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -2427,7 +2439,7 @@ function drawWindWidget() {
   const startY = cy - ay * tailLen * 0.4;
   ctx.strokeStyle = col;
   ctx.fillStyle = col;
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 3 * US;
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(startX, startY);
@@ -2435,20 +2447,21 @@ function drawWindWidget() {
   ctx.stroke();
   // Arrowhead
   const aang = Math.atan2(ay, ax);
+  const ah = 7 * US;
   ctx.beginPath();
   ctx.moveTo(tipX, tipY);
-  ctx.lineTo(tipX - Math.cos(aang - 0.55) * 7, tipY - Math.sin(aang - 0.55) * 7);
-  ctx.lineTo(tipX - Math.cos(aang + 0.55) * 7, tipY - Math.sin(aang + 0.55) * 7);
+  ctx.lineTo(tipX - Math.cos(aang - 0.55) * ah, tipY - Math.sin(aang - 0.55) * ah);
+  ctx.lineTo(tipX - Math.cos(aang + 0.55) * ah, tipY - Math.sin(aang + 0.55) * ah);
   ctx.closePath();
   ctx.fill();
 
   // mph label below
   ctx.fillStyle = '#fff';
-  ctx.font = 'bold 13px -apple-system';
-  ctx.fillText(`${wind.mph}`, cx, cy + r + 11);
-  ctx.font = '9px -apple-system';
+  ctx.font = `bold ${13 * US}px -apple-system`;
+  ctx.fillText(`${wind.mph}`, cx, cy + r + 12 * US);
+  ctx.font = `${9 * US}px -apple-system`;
   ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.fillText('mph', cx, cy + r + 22);
+  ctx.fillText('mph', cx, cy + r + 23 * US);
   ctx.restore();
 }
 
@@ -3272,8 +3285,9 @@ function drawAimArrow(ux, uy, col) {
 
 function drawMeter() {
   if (!meter) return;
-  const barX = W - 42, barW = 20;
-  const barTop = 130, barBot = 560;
+  const barW = 26 * US;
+  const barX = CW - 30 * US - barW;
+  const barTop = CH * 0.20, barBot = CH * 0.72;
   const barH = barBot - barTop;
   // needle position: v=0 at bottom (strike line), v=1 at top. Overshoot dips below.
   const vToY = (v) => barBot - v * barH;
@@ -3281,7 +3295,7 @@ function drawMeter() {
   ctx.save();
   // Backing
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  roundRect(ctx, barX - 6, barTop - 14, barW + 12, barH + 48, 10);
+  roundRect(ctx, barX - 8 * US, barTop - 20 * US, barW + 16 * US, barH + 64 * US, 12 * US);
   ctx.fill();
   // Track
   const trk = ctx.createLinearGradient(0, barBot, 0, barTop);
@@ -3290,7 +3304,7 @@ function drawMeter() {
   trk.addColorStop(1, '#e84848');
   ctx.fillStyle = trk;
   ctx.globalAlpha = 0.28;
-  roundRect(ctx, barX, barTop, barW, barH, 6);
+  roundRect(ctx, barX, barTop, barW, barH, 8 * US);
   ctx.fill();
   ctx.globalAlpha = 1;
 
@@ -3298,53 +3312,53 @@ function drawMeter() {
   const showPow = meter.stage === 'power' ? meter.v : meter.power;
   ctx.fillStyle = trk;
   const fillH = showPow * barH;
-  roundRect(ctx, barX, barBot - fillH, barW, fillH, 5);
+  roundRect(ctx, barX, barBot - fillH, barW, fillH, 6 * US);
   ctx.fill();
 
   // Locked power tick
   if (meter.power !== null) {
     ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2 * US;
     ctx.beginPath();
-    ctx.moveTo(barX - 4, vToY(meter.power));
-    ctx.lineTo(barX + barW + 4, vToY(meter.power));
+    ctx.moveTo(barX - 5 * US, vToY(meter.power));
+    ctx.lineTo(barX + barW + 5 * US, vToY(meter.power));
     ctx.stroke();
   }
 
   // Strike line + perfect zone at bottom
   ctx.fillStyle = 'rgba(120, 255, 150, 0.35)';
-  ctx.fillRect(barX - 2, vToY(0.045), barW + 4, vToY(-0.045) - vToY(0.045));
+  ctx.fillRect(barX - 3 * US, vToY(0.045), barW + 6 * US, vToY(-0.045) - vToY(0.045));
   ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 2.5 * US;
   ctx.beginPath();
-  ctx.moveTo(barX - 6, barBot);
-  ctx.lineTo(barX + barW + 6, barBot);
+  ctx.moveTo(barX - 8 * US, barBot);
+  ctx.lineTo(barX + barW + 8 * US, barBot);
   ctx.stroke();
 
   // Needle (accuracy stage shows the descending marker)
   const needleY = vToY(meter.v);
   ctx.fillStyle = '#fff';
   ctx.beginPath();
-  ctx.moveTo(barX - 8, needleY);
-  ctx.lineTo(barX - 1, needleY - 5);
-  ctx.lineTo(barX - 1, needleY + 5);
+  ctx.moveTo(barX - 11 * US, needleY);
+  ctx.lineTo(barX - 1 * US, needleY - 7 * US);
+  ctx.lineTo(barX - 1 * US, needleY + 7 * US);
   ctx.closePath();
   ctx.fill();
 
   // Label
   ctx.fillStyle = '#fff';
-  ctx.font = 'bold 11px -apple-system';
   ctx.textAlign = 'center';
+  ctx.font = `bold ${15 * US}px -apple-system`;
   if (meter.stage === 'power') {
-    ctx.fillText(`${Math.round(meter.v * 100)}%`, barX + barW/2, barTop - 20);
-    ctx.font = '9px -apple-system';
+    ctx.fillText(`${Math.round(meter.v * 100)}%`, barX + barW / 2, barTop - 26 * US);
+    ctx.font = `${11 * US}px -apple-system`;
     ctx.globalAlpha = 0.7;
-    ctx.fillText('TAP', barX + barW/2, barBot + 26);
+    ctx.fillText('TAP', barX + barW / 2, barBot + 34 * US);
   } else {
-    ctx.fillText(`${Math.round(meter.power * 100)}%`, barX + barW/2, barTop - 20);
-    ctx.font = '9px -apple-system';
+    ctx.fillText(`${Math.round(meter.power * 100)}%`, barX + barW / 2, barTop - 26 * US);
+    ctx.font = `${11 * US}px -apple-system`;
     ctx.globalAlpha = 0.7;
-    ctx.fillText('STRIKE!', barX + barW/2, barBot + 26);
+    ctx.fillText('STRIKE!', barX + barW / 2, barBot + 34 * US);
   }
   ctx.restore();
 }
