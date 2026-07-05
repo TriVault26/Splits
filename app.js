@@ -238,7 +238,7 @@ function computeRace(){
   const d=DIST[curDist],m=getModel(),weeks=num($('weeks').value)||16,cond=$('swimcond').value;
   $('setsum').textContent=`${cond} · ${$('bmpos').value} · ${weeks} wks`;
   const curCSS=cssPer100(parseTime($('cf400').value),parseTime($('cf200').value)),curFTP=num($('cftp').value);
-  const t5=parseTime($('cf5k').value),curVDOT=(isFinite(t5)&&t5>0)?vdotFromRace(5000,t5):NaN;
+  const t5=parseTime($('cf5k').value),rd=num($('cfrund').value)||5000,curVDOT=(isFinite(t5)&&t5>0)?vdotFromRace(rd,t5):NaN;
   let total=0,legD={},goalT={};
   d.legs.forEach((leg,i)=>{const [type,metres]=leg,t=parseTime($('rg'+i).value);if(isFinite(t))total+=t;
     if(type==='t1'||type==='t2'){if(isFinite(t)&&t>0)goalT[type]=t;return;}
@@ -253,7 +253,7 @@ function computeRace(){
   const req={};
   if(legD.swim){const rp=goalT.swim/(legD.swim/100);req.css=rp-d.swimOff+(SWIMCOND[cond]||0);}
   let actualIF=NaN;
-  if(legD.bike){const v=legD.bike/goalT.bike,w=powerFromSpeed(v,m);req.ftp=w/d.IF;req.bikeW=w;actualIF=(isFinite(curFTP)&&curFTP>0)?w/curFTP:d.IF;}
+  if(legD.bike){const v=legD.bike/goalT.bike,w=powerFromSpeed(v,m);req.ftp=w/d.IF;req.bikeW=w;actualIF=(isFinite(curFTP)&&curFTP>0)?w/curFTP:NaN;}
   if(legD.run){const gp=goalT.run/(legD.run/1000),pen=runPenalty(curDist,isFinite(actualIF)?actualIF:CEIL[curDist]);
     req.runPace=gp;req.pen=pen;req.freshPace=gp-pen;req.vdot=vdotFromRace(legD.run,(gp-pen)*(legD.run/1000));}
   const V=renderGap(req,{curCSS,curFTP,curVDOT},weeks);$('synth').textContent=synthLine(V);renderCouple(req,actualIF,curFTP,legD);renderCutoffs(goalT,total);renderSplits(req,legD,m);renderReq(req);
@@ -360,8 +360,8 @@ function renderBench(){
     const reps=[['VO₂max','106–120%',1.06,1.20],['Threshold','95–105%',.95,1.05],['Sweet spot','88–94%',.88,.94]];
     $('bikereps').innerHTML=reps.map(([n,tag,lo,hi])=>`<div class="row"><div class="lab"><b>${n}</b><span>${tag} of FTP</span></div><div class="val">${Math.round(lo*ftp)}–${Math.round(hi*ftp)}<small> w</small></div></div>`).join('');
   }else{$('bikezones').innerHTML='';$('bikereps').innerHTML='';}
-  const t5=parseTime($('cf5k').value);
-  if(isFinite(t5)&&t5>0){const vd=vdotFromRace(5000,t5);
+  const t5=parseTime($('cf5k').value),rd=num($('cfrund').value)||5000;
+  if(isFinite(t5)&&t5>0){const vd=vdotFromRace(rd,t5);
     const paces=[['Easy','recovery / aerobic',FRAC.Easy],['Marathon','long steady',FRAC.Marathon],['Threshold','tempo / cruise',FRAC.Threshold],['Interval','VO₂ effort',FRAC.Interval],['Rep','speed / economy',FRAC.Rep]];
     $('runpaces').innerHTML=paces.map(([n,dd,f])=>`<div class="row"><div class="lab"><b>${n}</b><span>${dd}</span></div><div class="val">${fmt(secPerKm(vd,f))}<small> /km</small></div></div>`).join('');
     const iP=secPerKm(vd,FRAC.Interval);$('runI').innerHTML=[400,600,800,1000,1200].map(x=>`<div class="rep"><div class="d">${x} m</div><div class="t">${fmt(iP*x/1000)}</div></div>`).join('');
@@ -371,11 +371,11 @@ function renderBench(){
 
 
 /* ======================= PERSISTENCE ======================= */
-const FIELD_IDS=['cf5k','cf400','cf200','cftp','weeks','swimcond','bmpos','bmmass','bmgrade','bmwind','bmalt','trigoal'];
+const FIELD_IDS=['cfrund','cf5k','cf400','cf200','cftp','weeks','swimcond','bmpos','bmmass','bmgrade','bmwind','bmalt','trigoal'];
 const store={
   save(){try{
     const legs=[];document.querySelectorAll('.leg-in').forEach(el=>legs.push(el.value));
-    const s={v:1,UNITS:{...UNITS},sport,curDist,mode:document.querySelector('#modetoggle [aria-selected="true"]')?.dataset.m||'solo',
+    const s={v:2,UNITS:{...UNITS},sport,curDist,mode:document.querySelector('#modetoggle [aria-selected="true"]')?.dataset.m||'solo',
       SPL:{strat:SPL.strat,len:{...SPL.len},start:SPL.start,temp:SPL.temp},
       times:{run:[...SPORTS.run.times],swim:[...SPORTS.swim.times],bike:[...SPORTS.bike.times]},
       idx:{run:SPORTS.run.i,swim:SPORTS.swim.i,bike:SPORTS.bike.i},
@@ -396,6 +396,7 @@ Array.from($('distseg').children).forEach(b=>b.addEventListener('click',()=>buil
 bindTime($('trigoal'),distributeGoal);
 ['bmpos','bmmass','bmgrade','bmwind','bmalt'].forEach(id=>$(id).addEventListener('input',()=>{computeRace();computeConv(true);}));
 ['swimcond','weeks'].forEach(id=>$(id).addEventListener('input',computeRace));
+$('cfrund').addEventListener('input',()=>{computeRace();renderBench();});
 bindTime($('cf5k'),()=>{computeRace();renderBench();});
 bindTime($('cf400'),()=>{computeRace();renderBench();});
 bindTime($('cf200'),()=>{computeRace();renderBench();});
@@ -414,6 +415,9 @@ document.querySelectorAll('.upills').forEach(g=>Array.from(g.children).forEach(b
   const s=store.load();
   if(s){
     try{
+      // v1 shipped example fitness values as real input values — drop any still untouched
+      if(s.v===1&&s.fields){const D={cf5k:'22:30',cf400:'6:24',cf200:'3:00',cftp:'225'};
+        for(const k in D)if(s.fields[k]===D[k])s.fields[k]='';}
       Object.assign(UNITS,s.UNITS||{});applyPool();
       document.querySelectorAll('.upills').forEach(g=>Array.from(g.children).forEach(x=>x.setAttribute('aria-selected',x.dataset.v===UNITS[g.dataset.k]?'true':'false')));
       for(const k of ['run','swim','bike']){if(s.times?.[k])SPORTS[k].times=s.times[k];if(Number.isInteger(s.idx?.[k]))SPORTS[k].i=Math.min(s.idx[k],SPORTS[k].dists.length-1);}
