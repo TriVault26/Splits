@@ -568,6 +568,9 @@ let pxPerYard = 1;
 // Where the last full shot was played from — water drops return here
 let lastShotPos = { x: 0, y: 0 };
 
+// Per-green slope: unit vector pointing DOWNHILL + strength. Putts drift and
+// curve down it; the break grid shows the read.
+let greenSlope = { dx: 0, dy: 1, accel: 0.012 };
 // WGT-style shot setup: distance to the pin, green elevation, and the
 // effective "plays-like" distance you actually swing to.
 let elevYds = 0;      // green elevation vs ball, + = uphill (plays longer)
@@ -876,6 +879,12 @@ function loadHole(i) {
   greenLift = clamp(1.3 * pxPerYard, 2, 6);
   // Green elevation vs the tee — deterministic per hole, -7..+7 yds.
   elevYds = Math.round((hashRand(i, 17, 5) - 0.5) * 14);
+  // Green slope — deterministic downhill direction + strength per hole.
+  const slopeAng = hashRand(i, 23, 11) * Math.PI * 2;
+  greenSlope = {
+    dx: Math.cos(slopeAng), dy: Math.sin(slopeAng),
+    accel: 0.007 + hashRand(i, 29, 13) * 0.010
+  };
   lastShotPos = { x: h.start.x, y: h.start.y };
   // Fresh wind for each hole
   const windAng = Math.random() * Math.PI * 2;
@@ -1229,6 +1238,16 @@ function update() {
     const kind = getTerrainKind(ball.x, ball.y);
     const fric = frictionFor(kind);
     ball.vx *= fric; ball.vy *= fric;
+
+    // Green slope: gravity down the break curves putts. Gated above a small
+    // speed so a settling ball still comes to rest (no perpetual creep).
+    if (kind === 'green') {
+      const sp0 = Math.hypot(ball.vx, ball.vy);
+      if (sp0 > 0.35) {
+        ball.vx += greenSlope.dx * greenSlope.accel;
+        ball.vy += greenSlope.dy * greenSlope.accel;
+      }
+    }
 
     // Walls (buildings)
     if (h.walls) for (const w of h.walls) collideRect(ball, w);
@@ -1709,6 +1728,7 @@ function draw() {
   drawPatches3D(h);
   drawBunkers3D(false);   // bunkers behind the green — plateau occludes them
   drawGreen3D(h.hole.x, h.hole.y, theme);
+  drawGreenGrid(h);       // WGT break grid when putting
   drawBunkers3D(true);    // bunkers in front of the green
   drawWaters3D();
   drawRoads3D(h);
@@ -1936,6 +1956,64 @@ function drawGreen3D(x, y, theme) {
       const cp = projectPoly(circlePts(x + LIGHT_X * 3, y + LIGHT_Y * 3, rGreen * f, 20, e));
       if (cp) { pathPoly(cp); ctx.stroke(); }
     }
+  }
+  ctx.restore();
+}
+
+// WGT-style break grid: a slope-aligned grid on the green with downhill
+// arrows. Shown while putting (ball on the green) to read the break.
+function drawGreenGrid(h) {
+  if (getTerrainKind(ball.x, ball.y) !== 'green') return;
+  const cx = h.hole.x, cy = h.hole.y;
+  const r = GREEN_RADIUS_YARDS * pxPerYard;
+  const e = greenLift;
+  const ux = greenSlope.dx, uy = greenSlope.dy;   // downhill
+  const vx = -uy, vy = ux;                         // across the slope
+  const steep = clamp((greenSlope.accel - 0.007) / 0.010, 0, 1); // 0..1
+  const gridCol = `rgba(255,255,255,${0.16 + steep * 0.12})`;
+  const N = 4, step = r / N;
+
+  const seg = (px, py, dx, dy) => {
+    ctx.beginPath();
+    let started = false;
+    for (let s = -r; s <= r + 0.001; s += r / 20) {
+      const x = px + dx * s, y = py + dy * s;
+      if (dist(x, y, cx, cy) > r) { started = false; continue; }
+      const p = proj(x, y, e);
+      if (!p) { started = false; continue; }
+      if (!started) { ctx.moveTo(p.x, p.y); started = true; } else ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+  };
+
+  ctx.save();
+  ctx.lineWidth = 1 * US;
+  ctx.strokeStyle = gridCol;
+  for (let i = -N; i <= N; i++) {
+    seg(cx + ux * i * step, cy + uy * i * step, vx, vy); // lines across slope
+    seg(cx + vx * i * step, cy + vy * i * step, ux, uy); // lines down slope
+  }
+  // Downhill arrows — colour ramps green (gentle) → red (steep)
+  const ar = Math.round(120 + steep * 135), ag = Math.round(220 - steep * 170);
+  const arrowCol = `rgb(${ar},${ag},70)`;
+  for (let i = -1; i <= 1; i++) {
+    const bx = cx + vx * i * step * 1.6;
+    const by = cy + vy * i * step * 1.6;
+    const tipX = bx + ux * step * 0.9, tipY = by + uy * step * 0.9;
+    const tail = proj(bx - ux * step * 0.5, by - uy * step * 0.5, e);
+    const tip = proj(tipX, tipY, e);
+    if (!tail || !tip) continue;
+    ctx.strokeStyle = arrowCol;
+    ctx.fillStyle = arrowCol;
+    ctx.lineWidth = 2.4 * US;
+    ctx.beginPath(); ctx.moveTo(tail.x, tail.y); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+    const ang = Math.atan2(tip.y - tail.y, tip.x - tail.x);
+    const hd = 7 * US;
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(tip.x - Math.cos(ang - 0.5) * hd, tip.y - Math.sin(ang - 0.5) * hd);
+    ctx.lineTo(tip.x - Math.cos(ang + 0.5) * hd, tip.y - Math.sin(ang + 0.5) * hd);
+    ctx.closePath(); ctx.fill();
   }
   ctx.restore();
 }
