@@ -2,22 +2,24 @@ name: Deploy famous-18 to Vercel
 
 on:
   workflow_dispatch:
-    inputs:
-      vercel_token:
-        description: Vercel token (revoke after use)
-        required: true
-        type: string
+  push:
+    branches: [main]
+    paths: ['famous-18/**']
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      VERCEL_TOKEN: ${{ inputs.vercel_token }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Mask token in logs
-        run: echo "::add-mask::$VERCEL_TOKEN"
+      - name: Check secret present
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN secret is not set. Add it in repo Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
 
       - name: Deploy famous-18 as static site
         working-directory: famous-18
