@@ -209,7 +209,8 @@
       <strong>How to play:</strong><br>
       • <strong>Aim:</strong> drag left / right across the course to swing your target line<br>
       • <strong>Shape it:</strong> pick Draw, Straight or Fade to curve the ball<br>
-      • <strong>Swing:</strong> tap the Swing button — once to start, again to set power, again to Strike on the line<br>
+      • <strong>Swing:</strong> tap Swing to start, again to set power — aim for the cyan <em>TARGET</em> notch — then Strike on the line for a <strong>Ding</strong><br>
+      • Read the <strong>elevation</strong> (↑/↓): uphill plays longer<br>
       • Bad lies speed the meter up: rough +25%, bunkers +45%<br>
       • Read the <strong>wind</strong> — it drifts your ball in the air<br>
       • Water: +1 stroke · Your best round is saved
@@ -551,6 +552,27 @@ let pxPerYard = 1;
 // Where the last full shot was played from — water drops return here
 let lastShotPos = { x: 0, y: 0 };
 
+// WGT-style shot setup: distance to the pin, green elevation, and the
+// effective "plays-like" distance you actually swing to.
+let elevYds = 0;      // green elevation vs ball, + = uphill (plays longer)
+let targetYds = 0;    // straight-line distance to the pin (yards)
+let playsYds = 0;     // effective playing distance after elevation
+let shotFeedback = '', shotFeedbackCol = '#fff', feedbackTimer = 0;  // tempo toast after a swing
+// Uphill needs more club: shrinks effective carry so you swing harder.
+function elevFactor() { return clamp(1 - elevYds * 0.006, 0.82, 1.20); }
+function putterRangeYds() { return PUTTER_MAX_VEL_YPF / (1 - FRIC_GREEN); }
+function refreshDistances() {
+  const h = HOLES[currentHole];
+  targetYds = dist(ball.x, ball.y, h.hole.x, h.hole.y) / pxPerYard;
+  playsYds = targetYds / elevFactor();
+}
+// Meter power that lands the ball on the pin (the WGT "target" notch).
+function targetPower() {
+  const club = CLUBS[selectedClub];
+  if (club.isPutter) return clamp(targetYds / putterRangeYds(), 0.08, 1);
+  return clamp(playsYds / club.y, 0.12, 1);
+}
+
 // 3-D camera: position + orthonormal ground basis (fwd toward pin, right).
 // x/y live in world ground coords; h is eye height in world px.
 let cam = { x: 250, y: 760, fx: 0, fy: -1, rx: 1, ry: 0, h: 30, back: 40 };
@@ -676,6 +698,7 @@ function playBounce()  { sfxTone(300, 0.04, 0.07, 'sine'); }
 function playSandHit() { sfxNoise(0.16, 750, 0.18, 350); }
 function playSplash()  { sfxNoise(0.55, 1400, 0.30, 180); }
 function playTick()    { sfxTone(880, 0.03, 0.05, 'square'); }
+function playDing()    { sfxTone(1320, 0.06, 0.13, 'sine', 0); sfxTone(1980, 0.22, 0.11, 'sine', 0.04); }
 function playSink() {
   sfxTone(720, 0.03, 0.12, 'square', 0);
   sfxTone(600, 0.03, 0.10, 'square', 0.07);
@@ -822,6 +845,8 @@ function loadHole(i) {
   const pxDist = dist(h.start.x, h.start.y, h.hole.x, h.hole.y);
   pxPerYard = pxDist / h.yards;
   greenLift = clamp(1.3 * pxPerYard, 2, 6);
+  // Green elevation vs the tee — deterministic per hole, -7..+7 yds.
+  elevYds = Math.round((hashRand(i, 17, 5) - 0.5) * 14);
   lastShotPos = { x: h.start.x, y: h.start.y };
   // Fresh wind for each hole
   const windAng = Math.random() * Math.PI * 2;
@@ -854,9 +879,7 @@ function resetBall(toX, toY) {
 }
 
 function autoSelectClub() {
-  const h = HOLES[currentHole];
-  const pxToPin = dist(ball.x, ball.y, h.hole.x, h.hole.y);
-  const yToPin = pxToPin / pxPerYard;
+  refreshDistances();
   const terr = getTerrainKind(ball.x, ball.y);
   if (terr === 'green') {
     selectedClub = CLUBS.length - 1; // Putter
@@ -866,10 +889,12 @@ function autoSelectClub() {
     selectedClub = CLUBS.length - 2; // Sand Wedge out of bunkers
     return;
   }
+  // Club up for the elevation-adjusted playing distance, not the raw yardage.
+  const need = playsYds;
   let best = 0;
   for (let i = CLUBS.length - 1; i >= 0; i--) {
     if (CLUBS[i].isPutter) continue;
-    if (CLUBS[i].y >= yToPin) { best = i; break; }
+    if (CLUBS[i].y >= need) { best = i; break; }
     if (i === 0) best = 0;
   }
   selectedClub = best;
@@ -943,7 +968,8 @@ function executeShot(powerPct, dirX, dirY, strike) {
   const adjX = dirX * cosA - dirY * sinA;
   const adjY = dirX * sinA + dirY * cosA;
 
-  const yardsCarry = club.y * powerPct * pen.dist * distErr;
+  // Elevation folds into carry: uphill shrinks it so you must swing harder.
+  const yardsCarry = club.y * powerPct * pen.dist * distErr * elevFactor();
   const carryPx = yardsCarry * pxPerYard;
   const dur = Math.max(24, Math.min(60, Math.round(carryPx * 0.18)));
   // Wind drift in YARDS proportional to carry (≈0.6% of carry per mph), then to px.
@@ -1081,6 +1107,7 @@ function update() {
   if (waterFlashTimer > 0) waterFlashTimer--;
   if (celebrate > 0) celebrate--;
   if (swing.active) { swing.t++; if (swing.t >= swing.dur) swing.active = false; }
+  if (feedbackTimer > 0) feedbackTimer--;
   updateParticles();
 
   // Drift clouds based on wind
@@ -1272,15 +1299,21 @@ function updateHUD() {
   else { totalEl.textContent = String(diff); totalEl.classList.add('score-under'); }
 }
 function updateShotInfo() {
-  const h = HOLES[currentHole];
-  const yToPin = Math.round(dist(ball.x, ball.y, h.hole.x, h.hole.y) / pxPerYard);
+  refreshDistances();
   const club = CLUBS[selectedClub];
   const terr = getTerrainKind(ball.x, ball.y);
-  const lieStr = terr === 'sand'  ? ' · BUNKER (55%)'
-              : terr === 'rough' ? ' · rough (75%)'
-              : terr === 'green' ? ' · on green'
-              : ' · fairway';
-  document.getElementById('shotInfoLeft').textContent = `${yToPin} yds${lieStr}`;
+  const lie = terr === 'sand'  ? 'bunker'
+            : terr === 'rough' ? 'rough'
+            : terr === 'green' ? 'green'
+            : 'fairway';
+  const yTo = Math.round(targetYds);
+  // Elevation read (skip on the green, where you putt on the flat surface)
+  let elevStr = '', playsStr = '';
+  if (terr !== 'green' && Math.abs(elevYds) >= 2) {
+    elevStr = elevYds > 0 ? ` <span class="rydg">↑${elevYds}y</span>` : ` <span class="rydg">↓${-elevYds}y</span>`;
+    playsStr = ` · plays ${Math.round(playsYds)}`;
+  }
+  document.getElementById('shotInfoLeft').innerHTML = `${yTo} yds${elevStr}${playsStr} · ${lie}`;
   document.getElementById('shotInfoRight').innerHTML = club.isPutter
     ? 'Putter'
     : `${club.n} <span class="rydg">${club.y}y</span>`;
@@ -1658,6 +1691,25 @@ function draw() {
 
   drawWindWidget();
   drawMinimap(h);
+  drawFeedbackToast();
+}
+
+function drawFeedbackToast() {
+  if (feedbackTimer <= 0 || !shotFeedback) return;
+  const a = Math.min(1, feedbackTimer / 18);
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.font = `bold ${20 * US}px -apple-system`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const y = CH * 0.30;
+  const w = ctx.measureText(shotFeedback).width + 34 * US;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  roundRect(ctx, CW / 2 - w / 2, y - 20 * US, w, 40 * US, 12 * US);
+  ctx.fill();
+  ctx.fillStyle = shotFeedbackCol;
+  ctx.fillText(shotFeedback, CW / 2, y + 1);
+  ctx.restore();
 }
 
 function drawSky3D(sky) {
@@ -2369,9 +2421,10 @@ function drawAim3D() {
   const carry = club.isPutter
     ? clamp(dist(ball.x, ball.y, HOLES[currentHole].hole.x, HOLES[currentHole].hole.y) * 1.15, 8 * pxPerYard, 42 * pxPerYard)
     : club.y * pxPerYard;
+  // During setup the arc previews the target shot; during the meter it tracks power.
   const powFrac = (phase === 'meter' && meter)
     ? (meter.stage === 'power' ? Math.max(meter.v, 0.12) : meter.power)
-    : 1;
+    : targetPower();
   const reach = carry * powFrac;
   const arcH = club.isPutter ? 0 : Math.max(22, Math.min(130, reach * 0.34));
   // Straight target = control point; shaped finish curves off it (draw/fade)
@@ -3338,6 +3391,27 @@ function drawMeter() {
   roundRect(ctx, barX, barBot - fillH, barW, fillH, 6 * US);
   ctx.fill();
 
+  // Target notch — the power that lands the ball on the pin (WGT dial-a-distance).
+  // Label sits to the LEFT since the bar hugs the right screen edge.
+  const tp = targetPower();
+  const tpY = vToY(tp);
+  ctx.strokeStyle = '#37e0ff';
+  ctx.lineWidth = 3 * US;
+  ctx.beginPath();
+  ctx.moveTo(barX - 6 * US, tpY);
+  ctx.lineTo(barX + barW + 6 * US, tpY);
+  ctx.stroke();
+  ctx.fillStyle = '#37e0ff';
+  ctx.beginPath();
+  ctx.moveTo(barX - 6 * US, tpY);
+  ctx.lineTo(barX - 14 * US, tpY - 5 * US);
+  ctx.lineTo(barX - 14 * US, tpY + 5 * US);
+  ctx.closePath();
+  ctx.fill();
+  ctx.font = `bold ${10 * US}px -apple-system`;
+  ctx.textAlign = 'right';
+  ctx.fillText('TARGET', barX - 17 * US, tpY + 3.5 * US);
+
   // Locked power tick
   if (meter.power !== null) {
     ctx.strokeStyle = '#fff';
@@ -3455,10 +3529,17 @@ function fireMeterShot(needleV) {
   const v = aimVec();
   const wasPutter = CLUBS[selectedClub].isPutter;
   meter = null;
-  playTick();
+  // Tempo feedback (WGT-style ding): perfect timing dings; otherwise push/pull
+  const mag = Math.abs(strike);
+  if (mag < 0.09) { setFeedback('DING! · PERFECT', '#37e0ff'); playDing(); }
+  else if (mag < 0.28) { setFeedback(strike > 0 ? 'slight push' : 'slight pull', '#e8cb48'); playTick(); }
+  else { setFeedback(strike > 0 ? 'PUSHED right' : 'PULLED left', '#ff9b9b'); playTick(); }
   // Kick off the golfer's downswing / follow-through
   swing = { active: true, t: 0, dur: wasPutter ? 12 : 20, putt: wasPutter };
   executeShot(pow, v.ux, v.uy, strike);
+}
+function setFeedback(text, col) {
+  shotFeedback = text; shotFeedbackCol = col || '#fff'; feedbackTimer = 70;
 }
 
 // Aiming = drag left/right anywhere on the course to rotate the aim.
