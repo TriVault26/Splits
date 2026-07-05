@@ -1,0 +1,8 @@
+{
+  "name": "famous-18",
+  "version": "1.0.0",
+  "description": "18 Famous Holes — a championship golf game for the browser",
+  "scripts": {
+    "start": "npx serve ."
+  }
+}
