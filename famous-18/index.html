@@ -170,7 +170,7 @@
   </div>
   <div class="overlay" id="startOverlay">
     <h1>⛳ 18 Famous Holes</h1>
-    <div class="subtitle">Championship tee shots at the greatest holes in golf. Augusta. Pebble. Sawgrass. St Andrews.</div>
+    <div class="subtitle">Championship tee shots at the greatest holes in golf — now in a full 3-D TV camera. Augusta. Pebble. Sawgrass. St Andrews.</div>
     <div class="subtitle" id="statsLine" style="margin-top:-14px;font-size:12px;color:#a7f3d0"></div>
     <div class="instructions">
       <strong>How to play:</strong><br>
@@ -218,6 +218,23 @@ const PUTTER_MAX_VEL_YPF = 1.8;   // yards per frame at full power
 
 // Lighting direction for 3D shading (normalized, top-left to bottom-right)
 const LIGHT_X = -0.55, LIGHT_Y = -0.55;
+
+// 3-D perspective view (TV camera behind the ball)
+const FOCAL = 430;        // focal length in px — larger = more telephoto
+const HORIZON = 160;      // screen y of the horizon line
+const NEARZ = 6;          // near clip plane (world px in front of camera)
+const SKIES = {
+  default: { top:'#3f8fdc', bot:'#a8d4ef', haze:'#d7ecf7', ridge:'#2a5c38' },
+  links:   { top:'#7fa8c9', bot:'#c3d8e6', haze:'#e4edf1', ridge:'#6d7c46' },
+  desert:  { top:'#4f9be0', bot:'#b8dcf2', haze:'#f0e6d0', ridge:'#8a7c50' },
+  pebble:  { top:'#4a97d8', bot:'#9fd0ee', haze:'#dcedf5', ridge:'#33604a' },
+};
+function skyFor(t) {
+  if (t === 'links' || t === 'muirfield') return SKIES.links;
+  if (t === 'desert') return SKIES.desert;
+  if (t === 'pebble') return SKIES.pebble;
+  return SKIES.default;
+}
 
 // ============================================================
 // CLUBS — championship distances. landYps = residual landing velocity in yards/frame.
@@ -491,6 +508,12 @@ let pxPerYard = 1;
 // Where the last full shot was played from — water drops return here
 let lastShotPos = { x: 0, y: 0 };
 
+// 3-D camera: position + orthonormal ground basis (fwd toward pin, right).
+// x/y live in world ground coords; h is eye height in world px.
+let cam = { x: 250, y: 760, fx: 0, fy: -1, rx: 1, ry: 0, h: 30, back: 40 };
+// Per-hole world-space geometry for the perspective renderer
+let holeGeo = null;
+
 // Cup capture radius: scaled to yards so long holes don't become gimme-fests.
 // ~1.5 yards of capture, floored at 4px so short-scale holes stay fair.
 function captureRadius() {
@@ -732,6 +755,9 @@ function loadHole(i) {
   wind.mph = Math.round(3 + Math.random() * (MAX_WIND_MPH - 3));
   // Bake the static course layer once (perf: avoids re-drawing fairway path every frame)
   renderCourseLayer(THEMES[h.theme] || THEMES.classic);
+  precomputeHoleGeometry();
+  bakeMinimap();
+  snapCamera();
   meter = null;
   lockedAim = null;
   updateWindAmbience();
@@ -934,8 +960,9 @@ function impactParticles(x, y, kind) {
   for (let i = 0; i < 8; i++) {
     particles.push({
       x, y,
-      vx: (Math.random()-0.5) * 3,
-      vy: -Math.random() * 2.2 - 0.5,
+      vx: (Math.random()-0.5) * 2.4,
+      vy: (Math.random()-0.5) * 2.4,
+      e: 0, ve: 0.8 + Math.random() * 1.6,
       life: 22, col, r: 1.2 + Math.random() * 1.6
     });
   }
@@ -966,6 +993,7 @@ function update() {
   time++;
   if (waterFlashTimer > 0) waterFlashTimer--;
   if (celebrate > 0) celebrate--;
+  updateParticles();
 
   // Drift clouds based on wind
   for (const c of clouds) {
@@ -1000,7 +1028,7 @@ function update() {
       const lx = lerp(flight.startX, flight.landX, tr);
       const ly = lerp(flight.startY, flight.landY, tr);
       const hh = Math.sin(tr * Math.PI) * flight.height;
-      trail.push({x:lx, y:ly - hh, a:1});
+      trail.push({x:lx, y:ly, e:hh, a:1});
       if (trail.length > 22) trail.shift();
     }
     for (let t of trail) t.a *= 0.93;
@@ -1011,7 +1039,7 @@ function update() {
   if (phase === 'rolling') {
     const h = HOLES[currentHole];
     if (time % 2 === 0) {
-      trail.push({x:ball.x, y:ball.y, a:1});
+      trail.push({x:ball.x, y:ball.y, e:0, a:1});
       if (trail.length > 14) trail.shift();
     }
     for (let t of trail) t.a *= 0.92;
@@ -1076,8 +1104,6 @@ function update() {
     }
     return;
   }
-
-  updateParticles();
 }
 
 function collideRect(b, r) {
@@ -1094,16 +1120,21 @@ function collideRect(b, r) {
   }
 }
 function splashParticles(x, y) {
-  for (let i = 0; i < 22; i++) particles.push({ x, y, vx:(Math.random()-0.5)*7, vy:(Math.random()-0.5)*6-3, life:45, col:'#9cd4ff', r:2+Math.random()*2.5 });
+  for (let i = 0; i < 22; i++) particles.push({ x, y, vx:(Math.random()-0.5)*4, vy:(Math.random()-0.5)*4, e:0, ve:1.5+Math.random()*3, life:45, col:'#9cd4ff', r:2+Math.random()*2.5 });
 }
 function sinkParticles(x, y) {
   for (let i = 0; i < 30; i++) {
     const a = Math.random() * Math.PI * 2;
-    particles.push({ x, y, vx:Math.cos(a)*(2+Math.random()*3), vy:Math.sin(a)*(2+Math.random()*3)-2, life:50, col:'#ffd85c', r:2+Math.random()*2 });
+    particles.push({ x, y, vx:Math.cos(a)*(1+Math.random()*2), vy:Math.sin(a)*(1+Math.random()*2), e:0, ve:1.2+Math.random()*2.6, life:50, col:'#ffd85c', r:2+Math.random()*2 });
   }
 }
 function updateParticles() {
-  for (const p of particles) { p.x += p.vx; p.y += p.vy; p.vy += 0.15; p.vx *= 0.98; p.life--; }
+  for (const p of particles) {
+    p.x += p.vx; p.y += p.vy; p.vx *= 0.96; p.vy *= 0.96;
+    p.e = (p.e || 0) + p.ve; p.ve -= 0.16;
+    if (p.e < 0) { p.e = 0; p.ve *= -0.35; }
+    p.life--;
+  }
   particles = particles.filter(p => p.life > 0);
 }
 
@@ -1227,43 +1258,243 @@ function showEndScreen() {
 // ============================================================
 // RENDERING
 // ============================================================
-function draw() {
+// ============================================================
+// 3-D CAMERA
+// ============================================================
+function camTargets() {
+  const h = HOLES[currentHole];
+  let dx = h.hole.x - ball.x, dy = h.hole.y - ball.y;
+  const d = Math.hypot(dx, dy);
+  if (d < 0.001) { dx = cam.fx; dy = cam.fy; } else { dx /= d; dy /= d; }
+  const onGreen = getTerrainKind(ball.x, ball.y) === 'green';
+  const back = onGreen ? clamp(6 * pxPerYard, 16, 40) : clamp(10 * pxPerYard, 26, 62);
+  const hh   = onGreen ? clamp(3.2 * pxPerYard, 10, 26) : clamp(7 * pxPerYard, 18, 48);
+  return { fx: dx, fy: dy, back, h: hh };
+}
+function placeCam() {
+  cam.rx = -cam.fy; cam.ry = cam.fx;
+  cam.x = ball.x - cam.fx * cam.back;
+  cam.y = ball.y - cam.fy * cam.back;
+}
+function snapCamera() {
+  const t = camTargets();
+  cam.fx = t.fx; cam.fy = t.fy; cam.back = t.back; cam.h = t.h;
+  placeCam();
+}
+// Glide behind the ball when it's at rest; hold still (broadcast cam) in flight
+function updateCamera() {
+  if (phase === 'aiming' || phase === 'meter' || phase === 'holed') {
+    const t = camTargets();
+    cam.fx = lerp(cam.fx, t.fx, 0.09);
+    cam.fy = lerp(cam.fy, t.fy, 0.09);
+    const m = Math.hypot(cam.fx, cam.fy) || 1;
+    cam.fx /= m; cam.fy /= m;
+    cam.back = lerp(cam.back, t.back, 0.09);
+    cam.h = lerp(cam.h, t.h, 0.09);
+    placeCam();
+  }
+}
+
+// Project a world point (ground x/y + elevation e) → screen. null if behind camera.
+function proj(wx, wy, e) {
+  const dx = wx - cam.x, dy = wy - cam.y;
+  const z = dx * cam.fx + dy * cam.fy;
+  if (z < NEARZ) return null;
+  const l = dx * cam.rx + dy * cam.ry;
+  const s = FOCAL / z;
+  return { x: W / 2 + l * s, y: HORIZON + (cam.h - (e || 0)) * s, s, z };
+}
+// Project polygon with near-plane clipping. pts: [{x, y, e?}] → [{x,y}] or null.
+function projectPoly(pts) {
+  const cs = [];
+  for (const p of pts) {
+    const dx = p.x - cam.x, dy = p.y - cam.y;
+    cs.push({ z: dx * cam.fx + dy * cam.fy, l: dx * cam.rx + dy * cam.ry, e: p.e || 0 });
+  }
+  const out = [];
+  for (let i = 0; i < cs.length; i++) {
+    const a = cs[i], b = cs[(i + 1) % cs.length];
+    if (a.z > NEARZ) out.push(a);
+    if ((a.z > NEARZ) !== (b.z > NEARZ)) {
+      const t = (NEARZ - a.z) / (b.z - a.z);
+      out.push({ z: NEARZ, l: a.l + (b.l - a.l) * t, e: a.e + (b.e - a.e) * t });
+    }
+  }
+  if (out.length < 3) return null;
+  return out.map(c => {
+    const s = FOCAL / c.z;
+    return { x: W / 2 + c.l * s, y: HORIZON + (cam.h - c.e) * s };
+  });
+}
+function pathPoly(sp) {
+  if (!sp) return false;
+  ctx.beginPath();
+  ctx.moveTo(sp[0].x, sp[0].y);
+  for (let i = 1; i < sp.length; i++) ctx.lineTo(sp[i].x, sp[i].y);
+  ctx.closePath();
+  return true;
+}
+function circlePts(cx, cy, r, n) {
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+  }
+  return pts;
+}
+
+// ============================================================
+// PER-HOLE GEOMETRY (world space, built once per hole)
+// ============================================================
+function chaikin(nodes, iters) {
+  for (let k = 0; k < iters; k++) {
+    const out = [nodes[0]];
+    for (let i = 0; i < nodes.length - 1; i++) {
+      const a = nodes[i], b = nodes[i + 1];
+      out.push({ x: a.x * 0.75 + b.x * 0.25, y: a.y * 0.75 + b.y * 0.25, w: a.w * 0.75 + b.w * 0.25 });
+      out.push({ x: a.x * 0.25 + b.x * 0.75, y: a.y * 0.25 + b.y * 0.75, w: a.w * 0.25 + b.w * 0.75 });
+    }
+    out.push(nodes[nodes.length - 1]);
+    nodes = out;
+  }
+  return nodes;
+}
+function precomputeHoleGeometry() {
+  const h = HOLES[currentHole];
+  const fw = FAIRWAYS[currentHole] || [];
+  const geo = { ribbon: null, stripes: [], bunkers: [], waters: [], mottle: [], bushes: [], boulders: [], boxes: [] };
+
+  // Fairway ribbon from smoothed polyline
+  if (fw.length === 1) {
+    geo.ribbon = circlePts(fw[0].x, fw[0].y, fw[0].w, 16);
+  } else if (fw.length > 1) {
+    let nodes = fw.map(p => ({ x: p.x, y: p.y, w: p.w }));
+    const first = nodes[0], second = nodes[1];
+    const last = nodes[nodes.length - 1], plast = nodes[nodes.length - 2];
+    let d0x = second.x - first.x, d0y = second.y - first.y;
+    let l0 = Math.hypot(d0x, d0y) || 1;
+    let d1x = last.x - plast.x, d1y = last.y - plast.y;
+    let l1 = Math.hypot(d1x, d1y) || 1;
+    nodes = [
+      { x: first.x - d0x / l0 * first.w * 0.8, y: first.y - d0y / l0 * first.w * 0.8, w: first.w * 0.45 },
+      ...nodes,
+      { x: last.x + d1x / l1 * last.w * 0.8, y: last.y + d1y / l1 * last.w * 0.8, w: last.w * 0.45 }
+    ];
+    nodes = chaikin(nodes, 2);
+    const L = [], R = [];
+    for (let i = 0; i < nodes.length; i++) {
+      const p = nodes[i];
+      const q = nodes[Math.min(i + 1, nodes.length - 1)];
+      const o = nodes[Math.max(i - 1, 0)];
+      let dx = q.x - o.x, dy = q.y - o.y;
+      const m = Math.hypot(dx, dy) || 1;
+      dx /= m; dy /= m;
+      L.push({ x: p.x - dy * p.w, y: p.y + dx * p.w });
+      R.push({ x: p.x + dy * p.w, y: p.y - dx * p.w });
+    }
+    geo.ribbon = [...L, ...[...R].reverse()];
+    // Mow stripes: alternating cross-bands along the ribbon
+    let acc = 0;
+    for (let i = 0; i < nodes.length - 1; i++) {
+      const seg = dist(nodes[i].x, nodes[i].y, nodes[i + 1].x, nodes[i + 1].y);
+      if (Math.floor(acc / 17) % 2 === 0) {
+        geo.stripes.push([L[i], L[i + 1], R[i + 1], R[i]]);
+      }
+      acc += seg;
+    }
+  }
+
+  // Bunker outlines (reuse the organic top-down outline generator)
+  if (h.sand) for (const s of h.sand) {
+    geo.bunkers.push({
+      lip: bunkerOutline(s, 1.09),
+      outer: bunkerOutline(s, 1.0),
+      inner: bunkerOutline(s, 0.85),
+      cx: s.x + s.w / 2, cy: s.y + s.h / 2
+    });
+  }
+
+  // Water polys — extend oceans past the course edge so they run to the horizon
+  if (h.water) for (const w of h.water) {
+    let x0 = w.x, x1 = w.x + w.w, y0 = w.y, y1 = w.y + w.h;
+    if (w.type === 'ocean') {
+      if (x0 <= 5) x0 = -1600;
+      if (x1 >= W - 5) x1 = W + 1600;
+      if (y0 <= 100) y0 = -1600;
+      if (y1 >= H - 5) y1 = H + 1600;
+    }
+    geo.waters.push({
+      pts: [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }],
+      ocean: w.type === 'ocean', w
+    });
+  }
+
+  // Ground tone blobs (subtle rough mottling)
+  for (let i = 0; i < 10; i++) {
+    geo.mottle.push({
+      x: hashRand(i, currentHole * 3 + 1, 7) * W,
+      y: hashRand(i, currentHole * 5 + 2, 11) * H,
+      r: 45 + hashRand(i, currentHole + 3, 13) * 70,
+      dark: hashRand(i, currentHole + 5, 17) > 0.5
+    });
+  }
+
+  // Bush billboards from azalea / gorse patches
+  if (h.decor) for (const d of h.decor) {
+    if (d.type === 'azaleas' || d.type === 'gorse') {
+      const n = clamp(Math.floor((d.w * d.h) / 500), 4, 14);
+      for (let i = 0; i < n; i++) {
+        geo.bushes.push({
+          x: d.x + hashRand(i, d.x, 1) * d.w,
+          y: d.y + hashRand(i, d.y, 2) * d.h,
+          r: 5 + hashRand(i, d.x + d.y, 3) * 7,
+          kind: d.type
+        });
+      }
+    } else if (d.type === 'rocks') {
+      const n = Math.max(2, Math.floor(Math.max(d.w, d.h) / 24));
+      for (let i = 0; i < n; i++) {
+        geo.boulders.push({
+          x: d.x + (d.w > d.h ? (i + 0.5) * (d.w / n) : hashRand(i, d.x, 4) * d.w),
+          y: d.y + (d.w > d.h ? hashRand(i, d.y, 5) * d.h : (i + 0.5) * (d.h / n)),
+          r: 2.5 + hashRand(i, 6, 7) * 3.5
+        });
+      }
+    } else if (d.type === 'stoneWall') {
+      geo.boxes.push({ x: d.x, y: d.y, w: d.w, h: d.h, ht: 7, style: 'stone' });
+    }
+  }
+  if (h.walls) for (const w of h.walls) {
+    // Keep buildings below the tee camera height so you can play over them
+    geo.boxes.push({ x: w.x, y: w.y, w: w.w, h: w.h, ht: w.style === 'hotel' ? 15 : 12, style: w.style || 'plain' });
+  }
+
+  holeGeo = geo;
+}
+
+// ============================================================
+// MINIMAP — the classic top-down view, baked per hole
+// ============================================================
+const miniLayer = document.createElement('canvas');
+miniLayer.width = W; miniLayer.height = H;
+const miniCtx = miniLayer.getContext('2d');
+function bakeMinimap() {
   const h = HOLES[currentHole];
   const theme = THEMES[h.theme] || THEMES.classic;
+  const prev = ctx;
+  ctx = miniCtx;
   ctx.clearRect(0, 0, W, H);
   ctx.drawImage(courseLayer, 0, 0);
-
-  // Corner label
-  ctx.save();
-  ctx.globalAlpha = 0.45;
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 11px -apple-system, sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText(`${h.course.toUpperCase()} · #${h.holeNum}`, W - 12, 18);
-  ctx.font = '10px -apple-system, sans-serif';
-  ctx.globalAlpha = 0.32;
-  ctx.fillText(`${h.holeName.toUpperCase()} · ${h.yards}Y · PAR ${h.par}`, W - 12, 32);
-  ctx.restore();
-
   if (h.decor) for (const d of h.decor) {
     if (d.type === 'road') drawRoad(d);
     else if (d.type === 'rocks') drawRocks(d);
   }
-
-  // Cloud shadows drifting over everything that's on the ground
-  drawCloudShadows();
-
-  // Green with fringe collar
   drawGreenComplex(h.hole.x, h.hole.y, theme);
-
   if (h.sand) for (const s of h.sand) drawSand(s);
   if (h.water) for (const w of h.water) drawWater(w);
-
   drawHoleCup(h.hole.x, h.hole.y);
-
   if (h.decor) for (const d of h.decor) if (d.type === 'stoneWall') drawStoneWall(d);
   if (h.walls) for (const w of h.walls) drawWall(w);
-
   if (h.decor) {
     for (const d of h.decor) {
       if (d.type === 'azaleas') drawAzaleas(d);
@@ -1271,34 +1502,36 @@ function draw() {
     }
     for (const d of h.decor) if (d.type === 'tree') drawTreeDecor(d);
   }
+  drawTee(h.start.x, h.start.y);
+  ctx = prev;
+}
 
-  drawTee(HOLES[currentHole].start.x, HOLES[currentHole].start.y);
+// ============================================================
+// RENDER — perspective pipeline
+// ============================================================
+function draw() {
+  updateCamera();
+  const h = HOLES[currentHole];
+  const theme = THEMES[h.theme] || THEMES.classic;
+  const sky = skyFor(h.theme);
+  ctx.clearRect(0, 0, W, H);
 
-  // Trails
-  for (const t of trail) {
-    ctx.save();
-    ctx.globalAlpha = t.a * 0.35;
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(t.x, t.y, BALL_R * 0.75, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
+  drawSky3D(sky);
+  drawGround3D(theme, sky);
+  drawFairway3D(theme);
+  drawTeePad3D(h.start.x, h.start.y);
+  drawPatches3D(h);
+  drawGreen3D(h.hole.x, h.hole.y, theme);
+  drawBunkers3D();
+  drawWaters3D();
+  drawRoads3D(h);
+  drawCup3D(h.hole.x, h.hole.y);
+  drawHaze3D(sky);
+  drawCelebrate3D(h);
+  drawBillboards3D(h);
+  drawAim3D();
 
-  // Ball rendering
-  if (phase === 'flying') {
-    const tr = flight.t / flight.dur;
-    const linX = lerp(flight.startX, flight.landX, tr);
-    const linY = lerp(flight.startY, flight.landY, tr);
-    const hh = Math.sin(tr * Math.PI) * flight.height;
-    drawShadowForAir(linX, linY, hh);
-    drawBallInAir(linX, linY - hh, hh);
-  } else if (phase !== 'holed' || celebrate > 30) {
-    drawBall(ball.x, ball.y);
-  }
-
-  if (aiming && phase === 'aiming') drawAimPreview();
-  if (phase === 'meter') { drawLockedAim(); drawMeter(); }
+  if (phase === 'meter') drawMeter();
 
   if (waterFlashTimer > 0) {
     ctx.save();
@@ -1308,29 +1541,651 @@ function draw() {
     ctx.restore();
   }
 
-  for (const p of particles) {
-    ctx.save();
-    ctx.globalAlpha = Math.max(0, p.life / 50);
-    ctx.fillStyle = p.col;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  if (celebrate > 0) {
-    const t = 1 - celebrate / 60;
-    ctx.save();
-    ctx.strokeStyle = `rgba(255, 216, 92, ${1 - t})`;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(h.hole.x, h.hole.y, 10 + t * 60, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // Wind widget — top-left corner
   drawWindWidget();
+  drawMinimap(h);
+
+  // Corner label
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 11px -apple-system, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(`${h.course.toUpperCase()} · #${h.holeNum}`, W - 12, 18);
+  ctx.font = '10px -apple-system, sans-serif';
+  ctx.globalAlpha = 0.36;
+  ctx.fillText(`${h.holeName.toUpperCase()} · ${h.yards}Y · PAR ${h.par}`, W - 12, 32);
+  ctx.restore();
+}
+
+function drawSky3D(sky) {
+  const grd = ctx.createLinearGradient(0, 0, 0, HORIZON);
+  grd.addColorStop(0, sky.top);
+  grd.addColorStop(1, sky.bot);
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, HORIZON + 1);
+  // Sun glow top-left (matches LIGHT_X/LIGHT_Y)
+  ctx.save();
+  const sun = ctx.createRadialGradient(92, 42, 4, 92, 42, 120);
+  sun.addColorStop(0, 'rgba(255,250,220,0.85)');
+  sun.addColorStop(0.25, 'rgba(255,246,200,0.28)');
+  sun.addColorStop(1, 'rgba(255,246,200,0)');
+  ctx.fillStyle = sun;
+  ctx.fillRect(0, 0, W, HORIZON);
+  // Clouds
+  for (const c of clouds) {
+    const sy = 26 + (c.y / H) * (HORIZON - 88);
+    const r = c.r * 0.55;
+    ctx.fillStyle = 'rgba(255,255,255,0.66)';
+    ctx.beginPath(); ctx.ellipse(c.x, sy, r, r * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(c.x + r * 0.5, sy + 2, r * 0.62, r * 0.26, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(c.x - r * 0.55, sy + 1, r * 0.5, r * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // Distant tree ridge on the horizon
+  ctx.fillStyle = sky.ridge;
+  ctx.globalAlpha = 0.55;
+  ctx.beginPath();
+  ctx.moveTo(0, HORIZON + 1);
+  for (let x = 0; x <= W; x += 18) {
+    const yy = HORIZON - 3 - hashRand(x, currentHole, 5) * 9 - Math.sin(x * 0.02 + currentHole * 2) * 4;
+    ctx.lineTo(x, yy);
+  }
+  ctx.lineTo(W, HORIZON + 1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawGround3D(theme, sky) {
+  const grd = ctx.createLinearGradient(0, HORIZON, 0, H);
+  grd.addColorStop(0, lightenColor(shadeColor(theme.top, 0.05), 0.16));
+  grd.addColorStop(0.22, shadeColor(theme.top, 0.10));
+  grd.addColorStop(1, shadeColor(theme.bot, 0.14));
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, HORIZON, W, H - HORIZON);
+  // Rough mottling blobs, projected
+  ctx.save();
+  for (const m of holeGeo.mottle) {
+    const p = proj(m.x, m.y, 0);
+    if (!p || p.z > 900) continue;
+    const r = clamp(m.r * p.s * 0.5, 8, 190);
+    const g = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, r);
+    g.addColorStop(0, m.dark ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.06)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, r, r * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawFairway3D(theme) {
+  if (!holeGeo.ribbon) return;
+  const sp = projectPoly(holeGeo.ribbon);
+  if (!sp) return;
+  ctx.save();
+  const grd = ctx.createLinearGradient(0, HORIZON, 0, H);
+  grd.addColorStop(0, lightenColor(theme.top, 0.06));
+  grd.addColorStop(1, theme.bot);
+  ctx.fillStyle = grd;
+  pathPoly(sp);
+  ctx.fill();
+  // Edge cut
+  ctx.globalAlpha = 0.16;
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 2;
+  pathPoly(sp);
+  ctx.stroke();
+  // Mow stripes
+  ctx.globalAlpha = 0.095;
+  ctx.fillStyle = '#fff';
+  for (const q of holeGeo.stripes) {
+    const qp = projectPoly(q);
+    if (qp) { pathPoly(qp); ctx.fill(); }
+  }
+  ctx.restore();
+}
+
+function drawTeePad3D(x, y) {
+  const sp = projectPoly([
+    { x: x - 26, y: y - 14 }, { x: x + 26, y: y - 14 },
+    { x: x + 26, y: y + 14 }, { x: x - 26, y: y + 14 }
+  ]);
+  if (!sp) return;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,0.10)';
+  pathPoly(sp); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+  ctx.lineWidth = 1;
+  pathPoly(sp); ctx.stroke();
+  ctx.restore();
+}
+
+function drawPatches3D(h) {
+  if (!h.decor) return;
+  ctx.save();
+  for (const d of h.decor) {
+    if (d.type !== 'azaleas' && d.type !== 'gorse') continue;
+    const sp = projectPoly([
+      { x: d.x, y: d.y }, { x: d.x + d.w, y: d.y },
+      { x: d.x + d.w, y: d.y + d.h }, { x: d.x, y: d.y + d.h }
+    ]);
+    if (!sp) continue;
+    ctx.fillStyle = d.type === 'azaleas' ? 'rgba(35,88,48,0.85)' : 'rgba(105,124,58,0.6)';
+    pathPoly(sp); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawGreen3D(x, y, theme) {
+  const rGreen = GREEN_RADIUS_YARDS * pxPerYard;
+  const rFringe = FRINGE_RADIUS_YARDS * pxPerYard;
+  ctx.save();
+  const fr = projectPoly(circlePts(x, y, rFringe, 26));
+  if (fr) { ctx.fillStyle = theme.fringe; pathPoly(fr); ctx.fill(); }
+  const gr = projectPoly(circlePts(x, y, rGreen, 26));
+  if (gr) {
+    const c = proj(x, y, 0);
+    if (c) {
+      const rr = Math.max(20, rGreen * c.s * 1.2);
+      const grd = ctx.createRadialGradient(c.x + rr * 0.25 * LIGHT_X, c.y + rr * 0.25 * LIGHT_Y, rr * 0.1, c.x, c.y, rr);
+      grd.addColorStop(0, lightenColor(theme.green, 0.1));
+      grd.addColorStop(0.6, theme.green);
+      grd.addColorStop(1, shadeColor(theme.green, 0.1));
+      ctx.fillStyle = grd;
+    } else ctx.fillStyle = theme.green;
+    pathPoly(gr); ctx.fill();
+    // Contours
+    ctx.globalAlpha = 0.1;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    for (const f of [0.66, 0.4]) {
+      const cp = projectPoly(circlePts(x + LIGHT_X * 3, y + LIGHT_Y * 3, rGreen * f, 20));
+      if (cp) { pathPoly(cp); ctx.stroke(); }
+    }
+  }
+  ctx.restore();
+}
+
+function drawBunkers3D() {
+  ctx.save();
+  for (const b of holeGeo.bunkers) {
+    const lip = projectPoly(b.lip);
+    if (!lip) continue;
+    ctx.fillStyle = 'rgba(45,90,50,0.85)';
+    pathPoly(lip); ctx.fill();
+    const outer = projectPoly(b.outer);
+    if (outer) { ctx.fillStyle = '#8a6f3d'; pathPoly(outer); ctx.fill(); }
+    const inner = projectPoly(b.inner);
+    if (inner) {
+      const c = proj(b.cx, b.cy, 0);
+      if (c && c.z < 700) {
+        const rr = Math.max(14, 30 * c.s);
+        const grd = ctx.createRadialGradient(c.x + rr * 0.3 * LIGHT_X, c.y + rr * 0.3 * LIGHT_Y, rr * 0.12, c.x, c.y, rr);
+        grd.addColorStop(0, '#fdf3c0');
+        grd.addColorStop(0.65, '#eed692');
+        grd.addColorStop(1, '#cfae67');
+        ctx.fillStyle = grd;
+      } else ctx.fillStyle = '#eed692';
+      pathPoly(inner); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawWaters3D() {
+  ctx.save();
+  for (const wt of holeGeo.waters) {
+    const sp = projectPoly(wt.pts);
+    if (!sp) continue;
+    let minY = 1e9, maxY = -1e9;
+    for (const p of sp) { if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y; }
+    const grd = ctx.createLinearGradient(0, minY, 0, Math.max(maxY, minY + 1));
+    if (wt.ocean) { grd.addColorStop(0, '#3a75ab'); grd.addColorStop(1, '#123f6e'); }
+    else { grd.addColorStop(0, '#4aa4ff'); grd.addColorStop(1, '#1d56b4'); }
+    ctx.fillStyle = grd;
+    pathPoly(sp); ctx.fill();
+    // Animated foam edge
+    ctx.globalAlpha = 0.4 + Math.sin(time * 0.05) * 0.14;
+    ctx.strokeStyle = '#dff2ff';
+    ctx.lineWidth = 1.6;
+    pathPoly(sp); ctx.stroke();
+    ctx.globalAlpha = 1;
+    // Ripple lines across the surface
+    const r = wt.w;
+    ctx.globalAlpha = 0.22;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    for (let i = 1; i <= 3; i++) {
+      const wy = r.y + (i / 4) * r.h + Math.sin(time * 0.06 + i) * 2;
+      ctx.beginPath();
+      let started = false;
+      for (let wx = r.x; wx <= r.x + r.w; wx += Math.max(8, r.w / 10)) {
+        const p = proj(wx, wy + Math.sin(wx * 0.08 + time * 0.07) * 1.6, 0);
+        if (!p) { started = false; continue; }
+        if (!started) { ctx.moveTo(p.x, p.y); started = true; }
+        else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
+function drawRoads3D(h) {
+  if (!h.decor) return;
+  ctx.save();
+  for (const d of h.decor) {
+    if (d.type !== 'road') continue;
+    const sp = projectPoly([
+      { x: d.x, y: d.y }, { x: d.x + d.w, y: d.y },
+      { x: d.x + d.w, y: d.y + d.h }, { x: d.x, y: d.y + d.h }
+    ]);
+    if (sp) { ctx.fillStyle = '#4a4540'; pathPoly(sp); ctx.fill(); }
+  }
+  ctx.restore();
+}
+
+function drawCup3D(x, y) {
+  const cupR = clamp(1.1 * pxPerYard, 2.2, 7);
+  const sp = projectPoly(circlePts(x, y, cupR, 14));
+  if (!sp) return;
+  ctx.save();
+  ctx.fillStyle = '#dcd4bc';
+  pathPoly(sp); ctx.fill();
+  const inner = projectPoly(circlePts(x, y, cupR * 0.78, 12));
+  if (inner) { ctx.fillStyle = '#0a0a0a'; pathPoly(inner); ctx.fill(); }
+  ctx.restore();
+}
+
+function drawHaze3D(sky) {
+  ctx.save();
+  const g = ctx.createLinearGradient(0, HORIZON, 0, HORIZON + 74);
+  g.addColorStop(0, sky.haze + '');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = g;
+  ctx.fillRect(0, HORIZON, W, 74);
+  ctx.restore();
+}
+
+function drawCelebrate3D(h) {
+  if (celebrate <= 0) return;
+  const t = 1 - celebrate / 60;
+  const sp = projectPoly(circlePts(h.hole.x, h.hole.y, (6 + t * 40) * Math.max(1, pxPerYard * 0.5), 20));
+  if (!sp) return;
+  ctx.save();
+  ctx.strokeStyle = `rgba(255, 216, 92, ${1 - t})`;
+  ctx.lineWidth = 3;
+  pathPoly(sp); ctx.stroke();
+  ctx.restore();
+}
+
+// ============================================================
+// BILLBOARDS — depth-sorted vertical sprites + 3-D boxes
+// ============================================================
+function drawBillboards3D(h) {
+  const bills = [];
+  const add = (z, fn) => bills.push({ z, fn });
+
+  // Trees
+  if (h.decor) for (const d of h.decor) {
+    if (d.type !== 'tree') continue;
+    const p = proj(d.x, d.y, 0);
+    if (p) add(p.z, () => drawTree3D(d, p));
+  }
+  // Bushes (azalea / gorse clumps)
+  for (const b of holeGeo.bushes) {
+    const p = proj(b.x, b.y, 0);
+    if (p) add(p.z, () => drawBush3D(b, p));
+  }
+  // Boulders
+  for (const b of holeGeo.boulders) {
+    const p = proj(b.x, b.y, 0);
+    if (p) add(p.z, () => drawBoulder3D(b, p));
+  }
+  // Buildings / walls
+  for (const b of holeGeo.boxes) {
+    const p = proj(b.x + b.w / 2, b.y + b.h / 2, 0);
+    add(p ? p.z : 30, () => drawBox3D(b));
+  }
+  // Tee markers
+  for (const off of [-15, 15]) {
+    const p = proj(h.start.x + off, h.start.y, 0);
+    if (p) add(p.z, () => {
+      const r = clamp(p.s * 3, 1.6, 5);
+      const mg = ctx.createRadialGradient(p.x - r * 0.4, p.y - r * 0.4, 0.4, p.x, p.y, r);
+      mg.addColorStop(0, '#9ecbff'); mg.addColorStop(1, '#2563eb');
+      ctx.fillStyle = mg;
+      ctx.beginPath(); ctx.arc(p.x, p.y - r * 0.5, r, 0, Math.PI * 2); ctx.fill();
+    });
+  }
+  // Pin + flag + beacon
+  {
+    const p = proj(h.hole.x, h.hole.y, 0);
+    if (p) add(p.z - 0.5, () => drawPin3D(p));
+  }
+  // Trail
+  for (const t of trail) {
+    const p = proj(t.x, t.y, t.e || 0);
+    if (p) add(p.z, () => {
+      ctx.save();
+      ctx.globalAlpha = t.a * 0.4;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, clamp(p.s * 1.6, 1.2, 4), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+  }
+  // Particles
+  for (const pt of particles) {
+    const p = proj(pt.x, pt.y, pt.e || 0);
+    if (p) add(p.z, () => {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, pt.life / 50);
+      ctx.fillStyle = pt.col;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, clamp(pt.r * p.s * 0.35, 1, 5), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+  }
+  // Ball (with ground shadow)
+  {
+    let bx = ball.x, by = ball.y, be = 0;
+    let show = true;
+    if (phase === 'flying') {
+      const tr = flight.t / flight.dur;
+      bx = lerp(flight.startX, flight.landX, tr);
+      by = lerp(flight.startY, flight.landY, tr);
+      be = Math.sin(tr * Math.PI) * flight.height;
+    } else if (phase === 'holed' && celebrate <= 30) show = false;
+    if (show) {
+      const pg = proj(bx, by, 0);
+      const pb = proj(bx, by, be);
+      if (pb) add(pb.z, () => {
+        if (pg) {
+          ctx.save();
+          ctx.fillStyle = `rgba(0,0,0,${Math.max(0.1, 0.32 - be * 0.0016)})`;
+          ctx.beginPath();
+          ctx.ellipse(pg.x, pg.y, clamp(pg.s * 3, 1.6, 7), clamp(pg.s * 1.2, 0.8, 3), 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+        const r = clamp(pb.s * 0.9, 2.6, 8);
+        const grd = ctx.createRadialGradient(pb.x - r * 0.4, pb.y - r * 0.4, 0.5, pb.x, pb.y, r);
+        grd.addColorStop(0, '#ffffff');
+        grd.addColorStop(0.65, '#ececec');
+        grd.addColorStop(1, '#a8a8a8');
+        ctx.fillStyle = grd;
+        ctx.beginPath(); ctx.arc(pb.x, pb.y, r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      });
+    }
+  }
+
+  bills.sort((a, b) => b.z - a.z);
+  for (const b of bills) b.fn();
+}
+
+function drawTree3D(d, p) {
+  const scl = p.s;
+  const trunkH = d.r * 1.15 * scl;
+  const canopyR = clamp(d.r * scl * 0.95, 2, 170);
+  ctx.save();
+  // Ground shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(p.x - canopyR * 0.4, p.y, canopyR * 0.9, canopyR * 0.28, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Trunk
+  ctx.fillStyle = '#4a3520';
+  ctx.fillRect(p.x - Math.max(1, canopyR * 0.08), p.y - trunkH, Math.max(2, canopyR * 0.16), trunkH);
+  // Canopy — stacked lobes, lit from top-left
+  const levels = [
+    { e: 1.0, r: 1.0 }, { e: 1.55, r: 0.78 }, { e: 2.0, r: 0.5 }
+  ];
+  for (const lv of levels) {
+    const cy = p.y - trunkH - (lv.e - 0.85) * canopyR * 0.95;
+    const rr = canopyR * lv.r;
+    const grd = ctx.createRadialGradient(p.x + rr * LIGHT_X * 0.55, cy + rr * LIGHT_Y * 0.55, rr * 0.1, p.x, cy, rr);
+    grd.addColorStop(0, '#6ab95f');
+    grd.addColorStop(0.6, '#2e6a2e');
+    grd.addColorStop(1, '#143412');
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.arc(p.x, cy, rr, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawBush3D(b, p) {
+  const r = clamp(b.r * p.s * 0.8, 1.5, 60);
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath(); ctx.ellipse(p.x, p.y, r * 1.1, r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+  const grd = ctx.createRadialGradient(p.x + r * LIGHT_X * 0.4, p.y - r * 0.6, r * 0.1, p.x, p.y - r * 0.5, r);
+  if (b.kind === 'azaleas') { grd.addColorStop(0, '#3f8a4d'); grd.addColorStop(1, '#1e4a28'); }
+  else { grd.addColorStop(0, '#6f823c'); grd.addColorStop(1, '#3d4a20'); }
+  ctx.fillStyle = grd;
+  ctx.beginPath(); ctx.arc(p.x, p.y - r * 0.5, r, 0, Math.PI * 2); ctx.fill();
+  // Blooms
+  const n = Math.max(2, Math.floor(r * 0.7));
+  for (let i = 0; i < Math.min(n, 10); i++) {
+    const a = hashRand(i, b.x, b.y) * Math.PI * 2;
+    const rr = hashRand(i, b.y, b.x) * r * 0.7;
+    const px = p.x + Math.cos(a) * rr;
+    const py = p.y - r * 0.5 + Math.sin(a) * rr * 0.8;
+    ctx.fillStyle = b.kind === 'azaleas'
+      ? ['#ff5fa0', '#ff89b6', '#ff3c7a'][i % 3]
+      : '#ffd447';
+    ctx.beginPath(); ctx.arc(px, py, Math.max(0.8, r * 0.14), 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawBoulder3D(b, p) {
+  const r = clamp(b.r * p.s * 0.55, 1, 13);
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath(); ctx.ellipse(p.x + r * 0.2, p.y, r, r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+  const grd = ctx.createRadialGradient(p.x - r * 0.35, p.y - r * 0.8, r * 0.1, p.x, p.y - r * 0.5, r);
+  grd.addColorStop(0, '#8a8278');
+  grd.addColorStop(1, '#4a443e');
+  ctx.fillStyle = grd;
+  ctx.beginPath(); ctx.arc(p.x, p.y - r * 0.5, r, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawBox3D(b) {
+  const c = [
+    { x: b.x, y: b.y }, { x: b.x + b.w, y: b.y },
+    { x: b.x + b.w, y: b.y + b.h }, { x: b.x, y: b.y + b.h }
+  ];
+  const faces = [];
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    const mx = (c[i].x + c[j].x) / 2, my = (c[i].y + c[j].y) / 2;
+    const z = (mx - cam.x) * cam.fx + (my - cam.y) * cam.fy;
+    faces.push({ i, j, z });
+  }
+  faces.sort((a, b2) => b2.z - a.z);
+  ctx.save();
+  const isHotel = b.style === 'hotel';
+  const isStone = b.style === 'stone';
+  for (const f of faces) {
+    const quad = projectPoly([
+      { x: c[f.i].x, y: c[f.i].y, e: 0 }, { x: c[f.j].x, y: c[f.j].y, e: 0 },
+      { x: c[f.j].x, y: c[f.j].y, e: b.ht }, { x: c[f.i].x, y: c[f.i].y, e: b.ht }
+    ]);
+    if (!quad) continue;
+    const shade = 0.75 + 0.25 * ((f.i % 2) === 0 ? 1 : 0.55);
+    ctx.fillStyle = isStone
+      ? `rgba(${Math.round(200 * shade)},${Math.round(192 * shade)},${Math.round(176 * shade)},1)`
+      : `rgba(${Math.round(226 * shade)},${Math.round(213 * shade)},${Math.round(184 * shade)},1)`;
+    pathPoly(quad); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 1;
+    pathPoly(quad); ctx.stroke();
+    // Lit windows on hotel faces
+    if (isHotel) {
+      const len = dist(c[f.i].x, c[f.i].y, c[f.j].x, c[f.j].y);
+      const cols = Math.min(10, Math.floor(len / 30));
+      for (let ci = 0; ci < cols; ci++) {
+        for (let ri = 0; ri < 2; ri++) {
+          const u = (ci + 0.5) / cols;
+          const wx = lerp(c[f.i].x, c[f.j].x, u);
+          const wy = lerp(c[f.i].y, c[f.j].y, u);
+          const e = b.ht * (0.3 + ri * 0.35);
+          const wp = proj(wx, wy, e);
+          if (!wp) continue;
+          const ww = clamp(wp.s * 4, 1.2, 9);
+          ctx.fillStyle = 'rgba(255,220,140,0.9)';
+          ctx.fillRect(wp.x - ww / 2, wp.y - ww * 0.7, ww, ww * 1.1);
+        }
+      }
+    }
+  }
+  // Roof
+  const roof = projectPoly(c.map(p => ({ x: p.x, y: p.y, e: b.ht })));
+  if (roof) {
+    ctx.fillStyle = isStone ? '#b5ac9c' : '#6e5b44';
+    pathPoly(roof); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawPin3D(p) {
+  const h = HOLES[currentHole];
+  // Beacon — vertical light column so the pin reads at any distance
+  const beaconH = 84;
+  const pulse = 0.16 + 0.07 * Math.sin(time * 0.08);
+  const bg = ctx.createLinearGradient(0, p.y - beaconH, 0, p.y);
+  bg.addColorStop(0, 'rgba(255,216,92,0)');
+  bg.addColorStop(1, `rgba(255,216,92,${pulse})`);
+  ctx.fillStyle = bg;
+  ctx.fillRect(p.x - 2.5, p.y - beaconH, 5, beaconH);
+  // Stick
+  const stickH = clamp(3.2 * pxPerYard * p.s, 20, 78);
+  ctx.strokeStyle = '#f5f5f5';
+  ctx.lineWidth = Math.max(1.2, Math.min(3, p.s * 0.5));
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+  ctx.lineTo(p.x, p.y - stickH);
+  ctx.stroke();
+  // Flag — waves downwind (in view space)
+  const windLat = wind.dirX * cam.rx + wind.dirY * cam.ry;
+  const str = wind.mph / MAX_WIND_MPH;
+  const dirSign = windLat >= 0 ? 1 : -1;
+  const flagLen = stickH * (0.34 + 0.14 * Math.abs(windLat) * str);
+  const ripple = Math.sin(time * 0.15) * stickH * 0.05 * (0.3 + str);
+  const topY = p.y - stickH;
+  ctx.fillStyle = '#ff3b3b';
+  ctx.beginPath();
+  ctx.moveTo(p.x, topY);
+  ctx.quadraticCurveTo(p.x + dirSign * flagLen * 0.5, topY - 2 + ripple, p.x + dirSign * flagLen, topY + stickH * 0.1 + ripple);
+  ctx.quadraticCurveTo(p.x + dirSign * flagLen * 0.5, topY + stickH * 0.18, p.x, topY + stickH * 0.22);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ============================================================
+// AIM UI — projected shot arc + landing ring
+// ============================================================
+function aimDirFromScreen() {
+  const bs = proj(ball.x, ball.y, 0);
+  if (!bs) return null;
+  const dxs = aimCur.x - bs.x, dys = aimCur.y - bs.y;
+  const mag = Math.hypot(dxs, dys);
+  if (mag < 6) return null;
+  const wx = cam.fx * dys - cam.rx * dxs;
+  const wy = cam.fy * dys - cam.ry * dxs;
+  const m = Math.hypot(wx, wy) || 1;
+  return { ux: wx / m, uy: wy / m, mag };
+}
+
+function drawAim3D() {
+  let dir = null, col = '#8fe3a2';
+  if (phase === 'aiming' && aiming) {
+    dir = aimDirFromScreen();
+  } else if (phase === 'meter' && lockedAim) {
+    dir = lockedAim;
+    col = '#ffd85c';
+  }
+  if (!dir) return;
+  const club = CLUBS[selectedClub];
+  const carry = club.isPutter
+    ? clamp(dist(ball.x, ball.y, HOLES[currentHole].hole.x, HOLES[currentHole].hole.y) * 1.15, 8 * pxPerYard, 42 * pxPerYard)
+    : club.y * pxPerYard;
+  const powFrac = (phase === 'meter' && meter)
+    ? (meter.stage === 'power' ? Math.max(meter.v, 0.12) : meter.power)
+    : 1;
+  const reach = carry * powFrac;
+  const arcH = club.isPutter ? 0 : Math.max(22, Math.min(130, reach * 0.34));
+  ctx.save();
+  ctx.fillStyle = col;
+  for (let i = 1; i <= 14; i++) {
+    const t = i / 14;
+    const gx = ball.x + dir.ux * reach * t;
+    const gy = ball.y + dir.uy * reach * t;
+    const e = Math.sin(t * Math.PI) * arcH;
+    const p = proj(gx, gy, e);
+    if (!p) continue;
+    ctx.globalAlpha = 0.85 - t * 0.35;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, clamp(p.s * 1.4, 1.4, 3.6), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Landing ring
+  const ring = projectPoly(circlePts(ball.x + dir.ux * reach, ball.y + dir.uy * reach, Math.max(4, 3.5 * pxPerYard), 16));
+  if (ring) {
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2;
+    pathPoly(ring);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ============================================================
+// MINIMAP OVERLAY
+// ============================================================
+function drawMinimap(h) {
+  const mw = 86, mh = 120, mx = 10, my = H - mh - 14;
+  ctx.save();
+  ctx.globalAlpha = 0.93;
+  roundRect(ctx, mx - 3, my - 3, mw + 6, mh + 6, 8);
+  ctx.fillStyle = 'rgba(6,16,10,0.78)';
+  ctx.fill();
+  roundRect(ctx, mx, my, mw, mh, 5);
+  ctx.clip();
+  ctx.drawImage(miniLayer, mx, my, mw, mh);
+  // View direction from ball
+  const bx = mx + (ball.x / W) * mw, by = my + (ball.y / H) * mh;
+  ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(bx, by);
+  ctx.lineTo(bx + cam.fx * 12, by + cam.fy * 12);
+  ctx.stroke();
+  // Ball + pin dots
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(bx, by, 2.2, 0, Math.PI * 2); ctx.fill();
+  const px = mx + (h.hole.x / W) * mw, py = my + (h.hole.y / H) * mh;
+  ctx.fillStyle = '#ff4040';
+  ctx.beginPath(); ctx.arc(px, py, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.lineWidth = 1;
+  roundRect(ctx, mx - 3, my - 3, mw + 6, mh + 6, 8);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawCloudShadows() {
@@ -1366,20 +2221,18 @@ function drawWindWidget() {
   ctx.strokeStyle = 'rgba(255,255,255,0.35)';
   ctx.lineWidth = 1;
   ctx.stroke();
-  // N marker
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.font = 'bold 9px -apple-system';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('N', cx, cy - r + 6);
 
-  // Wind arrow — colored by strength
+  // Wind arrow — colored by strength, rotated into the camera view
+  // (up = downwind ahead of you, down = wind in your face)
   const strength = Math.min(1, wind.mph / MAX_WIND_MPH);
   const wr = Math.round(140 + strength * 115);
   const wg = Math.round(220 - strength * 150);
   const wb = Math.round(140 - strength * 110);
   const col = `rgb(${wr},${wg},${wb})`;
-  const ax = wind.dirX, ay = wind.dirY;
+  const ax = wind.dirX * cam.rx + wind.dirY * cam.ry;
+  const ay = -(wind.dirX * cam.fx + wind.dirY * cam.fy);
   const tailLen = r * 0.75;
   const tipX = cx + ax * tailLen;
   const tipY = cy + ay * tailLen;
@@ -2369,12 +3222,11 @@ function pointerUp(e) {
   if (!aiming) return;
   e.preventDefault();
   aiming = false;
-  const dx = aimCur.x - ball.x;
-  const dy = aimCur.y - ball.y;
-  const mag = Math.hypot(dx, dy);
-  if (mag < 6) return;
-  // Slingshot: aim is opposite of drag. Lock direction, open the swing meter.
-  lockedAim = { ux: -dx / mag, uy: -dy / mag };
+  // Slingshot in view space: drag below the ball aims at the pin, drag
+  // left pushes the shot right, etc. Converted to a world direction.
+  const a = aimDirFromScreen();
+  if (!a) return;
+  lockedAim = { ux: a.ux, uy: a.uy };
   startMeter();
 }
 canvas.addEventListener('pointerdown', pointerDown);
