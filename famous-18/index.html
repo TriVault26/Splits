@@ -87,6 +87,29 @@
   }
   .club-btn.selected .ydg { opacity: 0.95; }
   .club-btn:disabled { opacity: 0.28; pointer-events: none; }
+  .shaperow { width: 100%; max-width: 560px; display: flex; gap: 8px; align-items: stretch; }
+  .shapebtns { display: flex; gap: 5px; flex: 1; }
+  .shape-btn {
+    flex: 1; padding: 10px 4px; border-radius: 11px;
+    background: rgba(255,255,255,0.08); color: #fff;
+    font-weight: 700; font-size: 13px; cursor: pointer;
+    border: 2px solid transparent; transition: transform 0.12s, background 0.15s, border-color 0.15s;
+  }
+  .shape-btn:active { transform: scale(0.94); }
+  .shape-btn.selected {
+    background: linear-gradient(135deg, #3ad17a, #1f9d57);
+    border-color: #bff3d4;
+    box-shadow: 0 0 0 2px rgba(58,209,122,0.3);
+  }
+  .swing-btn {
+    flex: 0 0 40%; padding: 12px; border-radius: 13px; border: none;
+    background: linear-gradient(135deg, #ffd85c, #f5a623);
+    color: #1a1207; font-weight: 900; font-size: 18px; letter-spacing: 0.4px;
+    cursor: pointer; box-shadow: 0 4px 16px rgba(245,166,35,0.45);
+    transition: transform 0.1s, filter 0.15s;
+  }
+  .swing-btn:active { transform: scale(0.96); }
+  .swing-btn.strike { background: linear-gradient(135deg, #ff7a7a, #e83b3b); color: #fff; box-shadow: 0 4px 16px rgba(232,59,59,0.5); }
   .bottom-bar { display: flex; gap: 8px; width: 100%; max-width: 560px; justify-content: center; }
   button.sys { padding: 9px 18px; border: none; border-radius: 10px; background: rgba(255,255,255,0.1); color: white; font-weight: 600; font-size: 13px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); }
   button.sys:active { transform: scale(0.96); background: rgba(255,255,255,0.18); }
@@ -160,6 +183,14 @@
       <div class="right" id="shotInfoRight">— selected</div>
     </div>
     <div class="clubrack" id="clubRack"></div>
+    <div class="shaperow" id="shapeRow">
+      <div class="shapebtns">
+        <button class="shape-btn" data-shape="-1" id="shapeDraw">Draw</button>
+        <button class="shape-btn selected" data-shape="0" id="shapeStraight">Straight</button>
+        <button class="shape-btn" data-shape="1" id="shapeFade">Fade</button>
+      </div>
+      <button class="swing-btn" id="swingBtn">Swing</button>
+    </div>
     <div class="bottom-bar">
       <button class="sys" id="retry">↻ Retee</button>
       <button class="sys" id="skip">Skip →</button>
@@ -176,8 +207,9 @@
     <div class="subtitle" id="statsLine" style="margin-top:-14px;font-size:12px;color:#a7f3d0"></div>
     <div class="instructions">
       <strong>How to play:</strong><br>
-      • Drag <em>away</em> from the ball to aim, release to lock<br>
-      • <strong>Swing meter:</strong> tap to set power, tap again at the line — mistime it and the ball pushes or pulls<br>
+      • <strong>Aim:</strong> drag left / right across the course to swing your target line<br>
+      • <strong>Shape it:</strong> pick Draw, Straight or Fade to curve the ball<br>
+      • <strong>Swing:</strong> tap the Swing button — once to start, again to set power, again to Strike on the line<br>
       • Bad lies speed the meter up: rough +25%, bunkers +45%<br>
       • Read the <strong>wind</strong> — it drifts your ball in the air<br>
       • Water: +1 stroke · Your best round is saved
@@ -538,9 +570,26 @@ function captureRadius() {
   return Math.min(HOLE_R - 2, Math.max(4, 1.5 * pxPerYard));
 }
 
-// Swing meter (3-click): drag sets aim, then tap to lock power, tap again at the line.
+// Two-step swing: 1) aim (drag left/right to rotate, pick draw/straight/fade),
+// 2) tap the Swing button to run the power+strike meter.
 let meter = null;          // { stage:'power'|'acc', v, dir, speed, power }
-let lockedAim = null;      // { ux, uy } locked when drag released
+let aimAngle = 0;          // absolute world aim direction (radians)
+let shotShape = 0;         // -1 draw (curves left), 0 straight, +1 fade (right)
+let aimDragging = false, aimDragX0 = 0, aimAngle0 = 0;
+const CURVE_STRENGTH = 0.12;   // lateral curve as a fraction of carry at full shape
+function aimVec() { return { ux: Math.cos(aimAngle), uy: Math.sin(aimAngle) }; }
+function setDefaultAim() {
+  const h = HOLES[currentHole];
+  aimAngle = Math.atan2(h.hole.y - ball.y, h.hole.x - ball.x);
+}
+// Quadratic-bezier flight position: p0 -> control (straight target) -> land (shaped)
+function flightPos(f, t) {
+  const u = 1 - t;
+  return {
+    x: u * u * f.startX + 2 * u * t * f.ctrlX + t * t * f.landX,
+    y: u * u * f.startY + 2 * u * t * f.ctrlY + t * t * f.landY
+  };
+}
 
 // Wind: set per hole. dirX/dirY are a unit vector of where the wind blows TOWARD.
 // mph is magnitude. Wind pushes the ball in (dirX, dirY) direction while airborne.
@@ -785,13 +834,16 @@ function loadHole(i) {
   bakeMinimap();
   snapCamera();
   meter = null;
-  lockedAim = null;
+  shotShape = 0;
+  setDefaultAim();
   updateWindAmbience();
   phase = 'aiming';
   autoSelectClub();
   updateHUD();
   updateShotInfo();
   renderClubRack();
+  renderShapeButtons();
+  updateSwingBtn();
   if (gameStarted) showIntroBanner();
 }
 function resetBall(toX, toY) {
@@ -896,10 +948,17 @@ function executeShot(powerPct, dirX, dirY, strike) {
   const dur = Math.max(24, Math.min(60, Math.round(carryPx * 0.18)));
   // Wind drift in YARDS proportional to carry (≈0.6% of carry per mph), then to px.
   const windDriftPx = wind.mph * yardsCarry * 0.006 * pxPerYard;
-  const landX = ball.x + adjX * carryPx + wind.dirX * windDriftPx;
-  const landY = ball.y + adjY * carryPx + wind.dirY * windDriftPx;
+  // Straight target (control point): where the ball would finish with no shape.
+  const ctrlX = ball.x + adjX * carryPx + wind.dirX * windDriftPx;
+  const ctrlY = ball.y + adjY * carryPx + wind.dirY * windDriftPx;
+  // Draw/fade: bend the finish laterally. Perp of aim; draw curves left, fade right.
+  const perpX = -adjY, perpY = adjX;
+  const lateral = shotShape * CURVE_STRENGTH * carryPx;
+  const landX = ctrlX + perpX * lateral;
+  const landY = ctrlY + perpY * lateral;
   flight = {
     startX: ball.x, startY: ball.y,
+    ctrlX, ctrlY,
     landX, landY,
     dirX: adjX, dirY: adjY,
     t: 0,
@@ -927,7 +986,7 @@ function handleLanding() {
     ball.vx = 0; ball.vy = 0;
     flight = null;
     phase = 'aiming';
-    autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack();
+    setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn();
     return;
   }
   if (land === 'wall') {
@@ -936,7 +995,7 @@ function handleLanding() {
     ball.vx = 0; ball.vy = 0;
     flight = null;
     phase = 'aiming';
-    autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack();
+    setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn();
     return;
   }
 
@@ -959,10 +1018,12 @@ function handleLanding() {
   if (flight.bounces > 0 && flight.landVel > 1.2 && flight.height > 8) {
     playBounce();
     const hopDist = flight.landVel * (land === 'rough' ? 4 : 7);
+    const hopLandX = ball.x + flight.dirX * hopDist;
+    const hopLandY = ball.y + flight.dirY * hopDist;
     flight = {
       startX: ball.x, startY: ball.y,
-      landX: ball.x + flight.dirX * hopDist,
-      landY: ball.y + flight.dirY * hopDist,
+      ctrlX: (ball.x + hopLandX) / 2, ctrlY: (ball.y + hopLandY) / 2,
+      landX: hopLandX, landY: hopLandY,
       dirX: flight.dirX, dirY: flight.dirY,
       t: 0,
       dur: Math.max(6, Math.round(hopDist * 0.35)),
@@ -1039,7 +1100,7 @@ function update() {
       if (meter.v >= 1) { meter.v = 1; meter.dir = -1; }
       else if (meter.v <= 0 && meter.dir < 0) {
         // Full sweep with no tap — cancel back to aiming
-        meter = null; lockedAim = null; phase = 'aiming';
+        meter = null; phase = 'aiming'; updateSwingBtn();
       }
     } else {
       // Accuracy: needle descends toward the strike line at 0. Overshoot auto-fires.
@@ -1052,10 +1113,9 @@ function update() {
     flight.t++;
     if (flight.t % 2 === 0) {
       const tr = flight.t / flight.dur;
-      const lx = lerp(flight.startX, flight.landX, tr);
-      const ly = lerp(flight.startY, flight.landY, tr);
+      const fp = flightPos(flight, tr);
       const hh = Math.sin(tr * Math.PI) * flight.height;
-      trail.push({x:lx, y:ly, e:hh, a:1});
+      trail.push({x:fp.x, y:fp.y, e:hh, a:1});
       if (trail.length > 22) trail.shift();
     }
     for (let t of trail) t.a *= 0.93;
@@ -1094,7 +1154,7 @@ function update() {
       // Drop where the last shot was played from (like a stroke-and-distance replay)
       resetBall(lastShotPos.x, lastShotPos.y);
       phase = 'aiming';
-      autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack();
+      setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn();
       return;
     }
 
@@ -1127,7 +1187,7 @@ function update() {
     if (Math.abs(ball.vx) < MIN_SPEED && Math.abs(ball.vy) < MIN_SPEED) {
       ball.vx = 0; ball.vy = 0;
       phase = 'aiming';
-      autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack();
+      setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn();
     }
     return;
   }
@@ -1248,7 +1308,7 @@ function renderClubRack() {
     btn.addEventListener('click', () => {
       selectedClub = parseInt(btn.getAttribute('data-i'));
       playTick();
-      renderClubRack(); updateShotInfo();
+      renderClubRack(); updateShotInfo(); updateSwingBtn();
     });
   });
 }
@@ -1316,8 +1376,8 @@ function updateCamera() {
     // Chase cam: sit behind the moving ball, look along the shot line, and
     // rise with the ball's apex so you follow the flight like a broadcast.
     const tr = flight.t / flight.dur;
-    const bx = lerp(flight.startX, flight.landX, tr);
-    const by = lerp(flight.startY, flight.landY, tr);
+    const fp = flightPos(flight, tr);
+    const bx = fp.x, by = fp.y;
     const be = Math.sin(tr * Math.PI) * flight.height;
     let fx = flight.dirX, fy = flight.dirY;
     const m = Math.hypot(fx, fy) || 1; fx /= m; fy /= m;
@@ -1980,8 +2040,8 @@ function drawBillboards3D(h) {
     let show = true;
     if (phase === 'flying') {
       const tr = flight.t / flight.dur;
-      bx = lerp(flight.startX, flight.landX, tr);
-      by = lerp(flight.startY, flight.landY, tr);
+      const fp = flightPos(flight, tr);
+      bx = fp.x; by = fp.y;
       be = Math.sin(tr * Math.PI) * flight.height;
     } else if (phase === 'holed' && celebrate <= 30) show = false;
     if (show) {
@@ -2178,18 +2238,6 @@ function drawPin3D(p) {
 // ============================================================
 // AIM UI — projected shot arc + landing ring
 // ============================================================
-function aimDirFromScreen() {
-  const bs = proj(ball.x, ball.y, 0);
-  if (!bs) return null;
-  const dxs = aimCur.x - bs.x, dys = aimCur.y - bs.y;
-  const mag = Math.hypot(dxs, dys);
-  if (mag < 6) return null;
-  const wx = cam.fx * dys - cam.rx * dxs;
-  const wy = cam.fy * dys - cam.ry * dxs;
-  const m = Math.hypot(wx, wy) || 1;
-  return { ux: wx / m, uy: wy / m, mag };
-}
-
 // ============================================================
 // GOLFER — foreground silhouette that addresses the ball and swings
 // ============================================================
@@ -2305,14 +2353,9 @@ function drawGolfer3D() {
 }
 
 function drawAim3D() {
-  let dir = null, col = '#8fe3a2';
-  if (phase === 'aiming' && aiming) {
-    dir = aimDirFromScreen();
-  } else if (phase === 'meter' && lockedAim) {
-    dir = lockedAim;
-    col = '#ffd85c';
-  }
-  if (!dir) return;
+  if (phase !== 'aiming' && phase !== 'meter') return;
+  const dir = aimVec();
+  const col = phase === 'meter' ? '#ffd85c' : '#8fe3a2';
   const club = CLUBS[selectedClub];
   const carry = club.isPutter
     ? clamp(dist(ball.x, ball.y, HOLES[currentHole].hole.x, HOLES[currentHole].hole.y) * 1.15, 8 * pxPerYard, 42 * pxPerYard)
@@ -2322,26 +2365,34 @@ function drawAim3D() {
     : 1;
   const reach = carry * powFrac;
   const arcH = club.isPutter ? 0 : Math.max(22, Math.min(130, reach * 0.34));
+  // Straight target = control point; shaped finish curves off it (draw/fade)
+  const tx = ball.x + dir.ux * reach, ty = ball.y + dir.uy * reach;
+  const perpX = -dir.uy, perpY = dir.ux;
+  const lateral = (club.isPutter ? 0 : shotShape) * CURVE_STRENGTH * reach;
+  const lx = tx + perpX * lateral, ly = ty + perpY * lateral;
+  const bez = (t) => {
+    const u = 1 - t;
+    return { x: u * u * ball.x + 2 * u * t * tx + t * t * lx, y: u * u * ball.y + 2 * u * t * ty + t * t * ly };
+  };
   ctx.save();
   ctx.fillStyle = col;
-  for (let i = 1; i <= 14; i++) {
-    const t = i / 14;
-    const gx = ball.x + dir.ux * reach * t;
-    const gy = ball.y + dir.uy * reach * t;
+  for (let i = 1; i <= 16; i++) {
+    const t = i / 16;
+    const b = bez(t);
     const e = Math.sin(t * Math.PI) * arcH;
-    const p = proj(gx, gy, e);
+    const p = proj(b.x, b.y, e);
     if (!p) continue;
-    ctx.globalAlpha = 0.85 - t * 0.35;
+    ctx.globalAlpha = 0.9 - t * 0.4;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, clamp(p.s * 1.4, 1.4, 3.6), 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, clamp(p.s * 1.5, 1.5, 4), 0, Math.PI * 2);
     ctx.fill();
   }
-  // Landing ring
-  const ring = projectPoly(circlePts(ball.x + dir.ux * reach, ball.y + dir.uy * reach, Math.max(4, 3.5 * pxPerYard), 16));
+  // Landing ring at the shaped finish
+  const ring = projectPoly(circlePts(lx, ly, Math.max(4, 3.5 * pxPerYard), 16));
   if (ring) {
-    ctx.globalAlpha = 0.9;
+    ctx.globalAlpha = 0.95;
     ctx.strokeStyle = col;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2 * US;
     pathPoly(ring);
     ctx.stroke();
   }
@@ -2352,7 +2403,7 @@ function drawAim3D() {
 // MINIMAP OVERLAY
 // ============================================================
 function drawMinimap(h) {
-  const mw = 92 * US, mh = 128 * US, mx = 12 * US, my = CH * 0.80 - mh;
+  const mw = 88 * US, mh = 122 * US, mx = 12 * US, my = CH * 0.72 - mh;
   const pad = 3 * US, rad = 7 * US;
   ctx.save();
   ctx.globalAlpha = 0.93;
@@ -3246,48 +3297,11 @@ function estimateRollYards(club, powerPct, terrainAtLand) {
   return total;
 }
 
-function drawAimPreview() {
-  const dx = aimCur.x - ball.x;
-  const dy = aimCur.y - ball.y;
-  const mag = Math.hypot(dx, dy);
-  if (mag < 3) return;
-  const ux = -dx / mag, uy = -dy / mag;
-  drawAimArrow(ux, uy, '#8fe3a2');
-}
-
-function drawLockedAim() {
-  if (!lockedAim) return;
-  drawAimArrow(lockedAim.ux, lockedAim.uy, '#ffd85c');
-}
-
-function drawAimArrow(ux, uy, col) {
-  ctx.save();
-  const arrowLen = 40;
-  const tipX = ball.x + ux * arrowLen;
-  const tipY = ball.y + uy * arrowLen;
-  ctx.strokeStyle = col;
-  ctx.lineWidth = 3;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(ball.x + ux * (BALL_R + 6), ball.y + uy * (BALL_R + 6));
-  ctx.lineTo(tipX, tipY);
-  ctx.stroke();
-  const ang = Math.atan2(uy, ux);
-  ctx.fillStyle = col;
-  ctx.beginPath();
-  ctx.moveTo(tipX, tipY);
-  ctx.lineTo(tipX - Math.cos(ang - 0.5) * 10, tipY - Math.sin(ang - 0.5) * 10);
-  ctx.lineTo(tipX - Math.cos(ang + 0.5) * 10, tipY - Math.sin(ang + 0.5) * 10);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-}
-
 function drawMeter() {
   if (!meter) return;
   const barW = 26 * US;
   const barX = CW - 30 * US - barW;
-  const barTop = CH * 0.20, barBot = CH * 0.72;
+  const barTop = CH * 0.16, barBot = CH * 0.64;
   const barH = barBot - barTop;
   // needle position: v=0 at bottom (strike line), v=1 at top. Overshoot dips below.
   const vToY = (v) => barBot - v * barH;
@@ -3382,7 +3396,35 @@ function startMeter() {
   const lieFac  = lie === 'sand' ? 1.45 : lie === 'rough' ? 1.22 : 1;
   const clubFac = club.isPutter ? 0.55 : club.y >= 250 ? 1.18 : club.y <= 110 ? 0.9 : 1;
   meter = { stage: 'power', v: 0, dir: 1, speed: 0.020 * lieFac * clubFac, power: null };
+  swing = { active: false, t: 0, dur: club.isPutter ? 12 : 20, putt: club.isPutter };
   phase = 'meter';
+  updateSwingBtn();
+}
+// The Swing button drives the whole swing: start meter → set power → strike.
+function swingButtonPress() {
+  if (phase === 'aiming') startMeter();
+  else if (phase === 'meter') meterTap();
+  updateSwingBtn();
+}
+function updateSwingBtn() {
+  const btn = document.getElementById('swingBtn');
+  if (!btn) return;
+  const putt = CLUBS[selectedClub].isPutter;
+  if (phase === 'meter' && meter) {
+    if (meter.stage === 'power') { btn.textContent = 'Set Power'; btn.classList.remove('strike'); }
+    else { btn.textContent = 'Strike!'; btn.classList.add('strike'); }
+  } else {
+    btn.textContent = putt ? 'Putt' : 'Swing';
+    btn.classList.remove('strike');
+  }
+  // Draw/fade only makes sense off the tee/turf, not on the putting green
+  document.querySelectorAll('.shape-btn').forEach(b => { b.disabled = putt; });
+  document.getElementById('shapeRow').style.opacity = putt ? '0.5' : '1';
+}
+function renderShapeButtons() {
+  document.querySelectorAll('.shape-btn').forEach(b => {
+    b.classList.toggle('selected', parseInt(b.getAttribute('data-shape')) === shotShape);
+  });
 }
 function meterTap() {
   if (!meter) return;
@@ -3391,47 +3433,43 @@ function meterTap() {
     meter.stage = 'acc';
     meter.dir = -1;
     playTick();
+    updateSwingBtn();
   } else {
     fireMeterShot(meter.v);
+    updateSwingBtn();
   }
 }
 function fireMeterShot(needleV) {
   // Strike error: how far the needle sat from the strike line (0 = pure)
   const strike = clamp(needleV / 0.5, -1, 1);
   const pow = meter.power;
-  const aim = lockedAim;
+  const v = aimVec();
   const wasPutter = CLUBS[selectedClub].isPutter;
   meter = null;
-  lockedAim = null;
   playTick();
   // Kick off the golfer's downswing / follow-through
   swing = { active: true, t: 0, dur: wasPutter ? 12 : 20, putt: wasPutter };
-  executeShot(pow, aim.ux, aim.uy, strike);
+  executeShot(pow, v.ux, v.uy, strike);
 }
 
+// Aiming = drag left/right anywhere on the course to rotate the aim.
+// A full swipe across the screen sweeps roughly ±70°.
 function pointerDown(e) {
   e.preventDefault();
   if (phase === 'meter') { meterTap(); return; }
   if (phase !== 'aiming') return;
-  aiming = true;
-  aimCur = canvasPoint(e);
+  aimDragging = true;
+  aimDragX0 = canvasPoint(e).x;
+  aimAngle0 = aimAngle;
 }
 function pointerMove(e) {
-  if (!aiming) return;
+  if (!aimDragging) return;
   e.preventDefault();
-  aimCur = canvasPoint(e);
+  const x = canvasPoint(e).x;
+  aimAngle = aimAngle0 + (x - aimDragX0) * (2.6 / CW);
 }
 function pointerUp(e) {
-  if (phase === 'meter') return;
-  if (!aiming) return;
-  e.preventDefault();
-  aiming = false;
-  // Slingshot in view space: drag below the ball aims at the pin, drag
-  // left pushes the shot right, etc. Converted to a world direction.
-  const a = aimDirFromScreen();
-  if (!a) return;
-  lockedAim = { ux: a.ux, uy: a.uy };
-  startMeter();
+  aimDragging = false;
 }
 canvas.addEventListener('pointerdown', pointerDown);
 canvas.addEventListener('pointermove', pointerMove);
@@ -3458,6 +3496,18 @@ canvas.addEventListener('touchmove',  (e) => e.preventDefault(), { passive: fals
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('dblclick', (e) => e.preventDefault());
 
+document.getElementById('swingBtn').addEventListener('click', (e) => {
+  e.preventDefault();
+  swingButtonPress();
+});
+document.querySelectorAll('.shape-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (phase !== 'aiming') return;
+    shotShape = parseInt(btn.getAttribute('data-shape'));
+    playTick();
+    renderShapeButtons();
+  });
+});
 document.getElementById('retry').addEventListener('click', () => {
   if (phase === 'flying' || phase === 'rolling' || phase === 'holed') return;
   loadHole(currentHole);
