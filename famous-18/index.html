@@ -111,8 +111,10 @@
   .swing-btn:active { transform: scale(0.96); }
   .swing-btn.strike { background: linear-gradient(135deg, #ff7a7a, #e83b3b); color: #fff; box-shadow: 0 4px 16px rgba(232,59,59,0.5); }
   .bottom-bar { display: flex; gap: 8px; width: 100%; max-width: 560px; justify-content: center; }
-  button.sys { padding: 9px 18px; border: none; border-radius: 10px; background: rgba(255,255,255,0.1); color: white; font-weight: 600; font-size: 13px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); }
+  button.sys { padding: 9px 16px; border: none; border-radius: 10px; background: rgba(255,255,255,0.1); color: white; font-weight: 600; font-size: 13px; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); }
   button.sys:active { transform: scale(0.96); background: rgba(255,255,255,0.18); }
+  button.sys.shot { background: rgba(85,168,255,0.16); border-color: rgba(120,180,255,0.4); color: #cfe6ff; font-weight: 700; }
+  button.sys.shot:disabled { opacity: 0.35; }
   button.primary { padding: 12px 28px; border: none; border-radius: 12px; background: linear-gradient(135deg, #4a9eff, #2563eb); color: white; font-weight: 700; font-size: 15px; cursor: pointer; border: 1px solid transparent; box-shadow: 0 4px 14px rgba(74,158,255,0.35); }
   button.primary:active { transform: scale(0.96); }
   .overlay {
@@ -192,6 +194,7 @@
       <button class="swing-btn" id="swingBtn">Swing</button>
     </div>
     <div class="bottom-bar">
+      <button class="sys shot" id="shotType">Shot: Full</button>
       <button class="sys" id="retry">↻ Retee</button>
       <button class="sys" id="skip">Skip →</button>
     </div>
@@ -290,6 +293,19 @@ const CLUBS = [
   { k:'PW',  n:'Pitching Wedge',  y: 110, landYps: 0.25 },
   { k:'SW',  n:'Sand Wedge',      y:  75, landYps: 0.12 },   // spins, almost no roll
   { k:'Put', n:'Putter',          y:   0, landYps: 0, isPutter: true }
+];
+
+// ============================================================
+// SHOT TYPES — trajectory + spin behavior. carry = fraction of the club's
+// distance the shot flies; height scales the apex; roll scales the landing
+// speed (rollout): <1 checks/backs up (backspin), >1 releases (topspin).
+// ============================================================
+const SHOT_TYPES = [
+  { k:'Full',  carry:1.00, height:1.00, roll:1.00 },
+  { k:'Punch', carry:0.90, height:0.48, roll:1.55 },  // low & running, into wind
+  { k:'Pitch', carry:0.72, height:1.28, roll:0.52 },  // high, checks up
+  { k:'Flop',  carry:0.52, height:1.70, roll:0.26 },  // very high, lands soft
+  { k:'Chip',  carry:0.44, height:0.42, roll:1.45 }   // low, releases & runs
 ];
 
 // ============================================================
@@ -566,11 +582,24 @@ function refreshDistances() {
   targetYds = dist(ball.x, ball.y, h.hole.x, h.hole.y) / pxPerYard;
   playsYds = targetYds / elevFactor();
 }
+// Shot type (Full/Punch/Pitch/Flop/Chip) — index into SHOT_TYPES.
+let shotType = 0;
+function currentShotType() { return SHOT_TYPES[shotType]; }
+// Which shot types are sensible for the current club/lie.
+function availableShotTypes() {
+  const club = CLUBS[selectedClub];
+  if (club.isPutter) return [0];
+  if (club.y >= 220) return [0, 1];                 // driver/woods: full or punch
+  const lie = getTerrainKind(ball.x, ball.y);
+  if (lie === 'sand') return [0, 2, 3];             // blast, pitch, flop out of sand
+  return [0, 1, 2, 3, 4];
+}
 // Meter power that lands the ball on the pin (the WGT "target" notch).
 function targetPower() {
   const club = CLUBS[selectedClub];
   if (club.isPutter) return clamp(targetYds / putterRangeYds(), 0.08, 1);
-  return clamp(playsYds / club.y, 0.12, 1);
+  const eff = club.y * currentShotType().carry;
+  return clamp(playsYds / eff, 0.12, 1);
 }
 
 // 3-D camera: position + orthonormal ground basis (fwd toward pin, right).
@@ -860,6 +889,7 @@ function loadHole(i) {
   snapCamera();
   meter = null;
   shotShape = 0;
+  shotType = 0;
   setDefaultAim();
   updateWindAmbience();
   phase = 'aiming';
@@ -869,6 +899,7 @@ function loadHole(i) {
   renderClubRack();
   renderShapeButtons();
   updateSwingBtn();
+  updateShotTypeBtn();
   if (gameStarted) showIntroBanner();
 }
 function resetBall(toX, toY) {
@@ -968,8 +999,10 @@ function executeShot(powerPct, dirX, dirY, strike) {
   const adjX = dirX * cosA - dirY * sinA;
   const adjY = dirX * sinA + dirY * cosA;
 
+  // Shot type shapes trajectory + rollout (Full/Punch/Pitch/Flop/Chip).
+  const st = currentShotType();
   // Elevation folds into carry: uphill shrinks it so you must swing harder.
-  const yardsCarry = club.y * powerPct * pen.dist * distErr * elevFactor();
+  const yardsCarry = club.y * powerPct * pen.dist * distErr * elevFactor() * st.carry;
   const carryPx = yardsCarry * pxPerYard;
   const dur = Math.max(24, Math.min(60, Math.round(carryPx * 0.18)));
   // Wind drift in YARDS proportional to carry (≈0.6% of carry per mph), then to px.
@@ -988,10 +1021,11 @@ function executeShot(powerPct, dirX, dirY, strike) {
     landX, landY,
     dirX: adjX, dirY: adjY,
     t: 0,
-    dur,
-    height: Math.max(22, Math.min(130, carryPx * 0.34)),
-    landVel: club.landYps * powerPct * pen.dist * pxPerYard,
-    bounces: 2
+    dur: Math.round(dur * (0.85 + st.height * 0.25)),
+    height: Math.max(20, Math.min(155, carryPx * 0.34 * st.height)),
+    landVel: club.landYps * powerPct * pen.dist * pxPerYard * st.roll,
+    bounces: st.roll < 0.6 ? 1 : 2,   // high checking shots don't bounce far
+    checkBack: st.roll < 0.4 ? carryPx * 0.03 : 0  // backspin sucks it back a touch
   };
   phase = 'flying';
   trail = [];
@@ -1012,7 +1046,7 @@ function handleLanding() {
     ball.vx = 0; ball.vy = 0;
     flight = null;
     phase = 'aiming';
-    setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn();
+    shotType = 0; setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn(); updateShotTypeBtn();
     return;
   }
   if (land === 'wall') {
@@ -1021,7 +1055,7 @@ function handleLanding() {
     ball.vx = 0; ball.vy = 0;
     flight = null;
     phase = 'aiming';
-    setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn();
+    shotType = 0; setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn(); updateShotTypeBtn();
     return;
   }
 
@@ -1060,9 +1094,15 @@ function handleLanding() {
     return; // stay in 'flying' phase for the hop
   }
 
-  // Begin roll-out
-  ball.vx = flight.dirX * flight.landVel;
-  ball.vy = flight.dirY * flight.landVel;
+  // Begin roll-out. Backspin (checkBack) trickles the ball back toward you.
+  const cb = flight.checkBack || 0;
+  if (cb > 0 && (land === 'green' || land === 'fairway')) {
+    ball.vx = -flight.dirX * cb;
+    ball.vy = -flight.dirY * cb;
+  } else {
+    ball.vx = flight.dirX * flight.landVel;
+    ball.vy = flight.dirY * flight.landVel;
+  }
   flight = null;
   phase = 'rolling';
   trail = [];
@@ -1181,7 +1221,7 @@ function update() {
       // Drop where the last shot was played from (like a stroke-and-distance replay)
       resetBall(lastShotPos.x, lastShotPos.y);
       phase = 'aiming';
-      setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn();
+      shotType = 0; setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn(); updateShotTypeBtn();
       return;
     }
 
@@ -1214,7 +1254,7 @@ function update() {
     if (Math.abs(ball.vx) < MIN_SPEED && Math.abs(ball.vy) < MIN_SPEED) {
       ball.vx = 0; ball.vy = 0;
       phase = 'aiming';
-      setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn();
+      shotType = 0; setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn(); updateShotTypeBtn();
     }
     return;
   }
@@ -1341,7 +1381,7 @@ function renderClubRack() {
     btn.addEventListener('click', () => {
       selectedClub = parseInt(btn.getAttribute('data-i'));
       playTick();
-      renderClubRack(); updateShotInfo(); updateSwingBtn();
+      renderClubRack(); updateShotInfo(); updateSwingBtn(); updateShotTypeBtn();
     });
   });
 }
@@ -2418,15 +2458,18 @@ function drawAim3D() {
   const dir = aimVec();
   const col = phase === 'meter' ? '#ffd85c' : '#8fe3a2';
   const club = CLUBS[selectedClub];
+  const st = currentShotType();
+  // Base carry matches executeShot (shot-type carry + elevation) so the arc
+  // lands where the ball actually will.
   const carry = club.isPutter
     ? clamp(dist(ball.x, ball.y, HOLES[currentHole].hole.x, HOLES[currentHole].hole.y) * 1.15, 8 * pxPerYard, 42 * pxPerYard)
-    : club.y * pxPerYard;
+    : club.y * st.carry * elevFactor() * pxPerYard;
   // During setup the arc previews the target shot; during the meter it tracks power.
   const powFrac = (phase === 'meter' && meter)
     ? (meter.stage === 'power' ? Math.max(meter.v, 0.12) : meter.power)
     : targetPower();
   const reach = carry * powFrac;
-  const arcH = club.isPutter ? 0 : Math.max(22, Math.min(130, reach * 0.34));
+  const arcH = club.isPutter ? 0 : Math.max(20, Math.min(155, reach * 0.34 * st.height));
   // Straight target = control point; shaped finish curves off it (draw/fade)
   const tx = ball.x + dir.ux * reach, ty = ball.y + dir.uy * reach;
   const perpX = -dir.uy, perpY = dir.ux;
@@ -3509,6 +3552,23 @@ function renderShapeButtons() {
     b.classList.toggle('selected', parseInt(b.getAttribute('data-shape')) === shotShape);
   });
 }
+function updateShotTypeBtn() {
+  const btn = document.getElementById('shotType');
+  if (!btn) return;
+  const avail = availableShotTypes();
+  if (!avail.includes(shotType)) shotType = 0;
+  const putt = CLUBS[selectedClub].isPutter;
+  btn.style.display = (putt || avail.length <= 1) ? 'none' : '';
+  btn.textContent = 'Shot: ' + SHOT_TYPES[shotType].k;
+}
+function cycleShotType() {
+  const avail = availableShotTypes();
+  if (avail.length <= 1) return;
+  const cur = avail.indexOf(shotType);
+  shotType = avail[(cur + 1) % avail.length];
+  playTick();
+  updateShotTypeBtn(); updateShotInfo();
+}
 function meterTap() {
   if (!meter) return;
   if (meter.stage === 'power') {
@@ -3597,6 +3657,10 @@ document.querySelectorAll('.shape-btn').forEach(btn => {
     playTick();
     renderShapeButtons();
   });
+});
+document.getElementById('shotType').addEventListener('click', () => {
+  if (phase !== 'aiming') return;
+  cycleShotType();
 });
 document.getElementById('retry').addEventListener('click', () => {
   if (phase === 'flying' || phase === 'rolling' || phase === 'holed') return;
