@@ -1749,9 +1749,31 @@ function draw() {
     ctx.restore();
   }
 
+  drawColorGrade();
   drawWindWidget();
   drawMinimap(h);
   drawFeedbackToast();
+}
+
+// Cinematic finish: warm sun sheen from the top-left + a soft vignette that
+// darkens the corners for depth. One gradient each — cheap, no per-pixel work.
+function drawColorGrade() {
+  ctx.save();
+  // Warm light bloom from the sun side
+  ctx.globalCompositeOperation = 'soft-light';
+  const warm = ctx.createRadialGradient(CW * 0.2, CH * 0.12, 10, CW * 0.2, CH * 0.12, CH * 0.75);
+  warm.addColorStop(0, 'rgba(255,240,200,0.5)');
+  warm.addColorStop(1, 'rgba(255,240,200,0)');
+  ctx.fillStyle = warm;
+  ctx.fillRect(0, 0, CW, CH);
+  // Vignette
+  ctx.globalCompositeOperation = 'source-over';
+  const vig = ctx.createRadialGradient(CW / 2, CH * 0.52, Math.min(CW, CH) * 0.42, CW / 2, CH * 0.52, Math.max(CW, CH) * 0.72);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(6,14,26,0.34)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, CW, CH);
+  ctx.restore();
 }
 
 function drawFeedbackToast() {
