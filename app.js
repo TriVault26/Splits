@@ -30,11 +30,14 @@ const dVO2=v=>-4.60+0.182258*v+0.000104*v*v;
 const vdotFromRace=(d,s)=>{const t=s/60,v=d/t;return dVO2(v)/dPct(t);};
 const velFromVO2=x=>{const a=0.000104,b=0.182258,c=-4.60-x;return(-b+Math.sqrt(b*b-4*a*c))/(2*a);};
 const secPerKm=(vd,f)=>60000/velFromVO2(f*vd);
-const timeForVdot=(d,vd)=>{let lo=d/8,hi=d/1.2;for(let i=0;i<60;i++){const mid=(lo+hi)/2;if(vdotFromRace(d,mid)>vd)lo=mid;else hi=mid;}return (lo+hi)/2;};
+const timeForVdot=(d,vd)=>{let lo=d/8,hi=d/0.5;for(let i=0;i<60;i++){const mid=(lo+hi)/2;if(vdotFromRace(d,mid)>vd)lo=mid;else hi=mid;}return (lo+hi)/2;};
 const FRAC={Easy:.70,Marathon:.84,Threshold:.88,Interval:.98,Rep:1.05};
 // swim
 const cssPer100=(t4,t2)=>(t4-t2)/2;
-const swimEq=(g,gd,d)=>g*Math.pow(d/gd,1.03);
+// piecewise power curve: sprint drop-off is steeper than distance drop-off
+// (validated vs LCM world records + age-group curves; knot at 400)
+const swimF=d=>d<=400?Math.pow(d,1.105):Math.pow(400,1.105)*Math.pow(d/400,1.04);
+const swimEq=(g,gd,d)=>g*swimF(d)/swimF(gd);
 const swimOffFromCSS=dm=>dm<=100?-7:dm<=200?-4:dm<=400?-2:dm<=800?0:dm<=1000?0:2;
 const SWIMCOND={'Pool':0,'OW wetsuit':4,'OW skin':-6};
 // bike
@@ -109,7 +112,7 @@ function soloRun(){
   $('reps').innerHTML=`<div class="subh">Hard intervals <span style="font-weight:400;color:var(--muted)">· your classic 400s & 800s — 2–5 min hard, jog recovery</span></div><div class="reps">${[400,600,800,1000,1200].map(x=>`<div class="rep"><div class="d">${x} m</div><div class="t">${fmt(iP*x/1000)}</div></div>`).join('')}</div>
     <div class="subh mt">Short speed <span style="font-weight:400;color:var(--muted)">· fast strides for leg speed — full recovery between</span></div><div class="reps">${[200,300,400].map(x=>`<div class="rep"><div class="d">${x} m</div><div class="t">${fmt(rP*x/1000)}</div></div>`).join('')}</div>
     <div class="subh mt">Tempo reps <span style="font-weight:400;color:var(--muted)">· comfortably hard cruising — short rests, e.g. 4×1 km</span></div><div class="reps">${[1000,1600,2000].map(x=>`<div class="rep"><div class="d">${kmLbl(x)}</div><div class="t">${fmt(tP*x/1000)}</div></div>`).join('')}</div>`;
-  $('soloFoot').innerHTML='Equivalents are equal-fitness times, not pace scaling.';
+  $('soloFoot').innerHTML='Equivalents are equal-fitness times, not pace scaling.'+(gd<42195?' The marathon line assumes marathon-specific training — on modest mileage expect 3–8% slower.':'');
 }
 function soloSwim(){
   const S=SPORTS.swim,gd=S.dists[S.i][1],gt=parseTime($('gtime').value);
