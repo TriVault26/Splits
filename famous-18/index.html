@@ -1634,8 +1634,9 @@ function draw() {
   drawFairway3D(theme);
   drawTeePad3D(h.start.x, h.start.y);
   drawPatches3D(h);
+  drawBunkers3D(false);   // bunkers behind the green — plateau occludes them
   drawGreen3D(h.hole.x, h.hole.y, theme);
-  drawBunkers3D();
+  drawBunkers3D(true);    // bunkers in front of the green
   drawWaters3D();
   drawRoads3D(h);
   drawCup3D(h.hole.x, h.hole.y);
@@ -1847,9 +1848,17 @@ function drawGreen3D(x, y, theme) {
   ctx.restore();
 }
 
-function drawBunkers3D() {
+function drawBunkers3D(nearPass) {
+  // The green is a raised plateau; bunkers sit on the ground. Split them by
+  // depth so bunkers BEHIND the green are drawn first (and get occluded by the
+  // plateau) and only bunkers in FRONT of it draw over the green pass.
+  const gc = proj(HOLES[currentHole].hole.x, HOLES[currentHole].hole.y, greenLift);
+  const gz = gc ? gc.z : 1e9;
   ctx.save();
   for (const b of holeGeo.bunkers) {
+    const bc = proj(b.cx, b.cy, 0);
+    const isNear = bc ? bc.z < gz : true;
+    if (isNear !== nearPass) continue;
     const lip = projectPoly(b.lip);
     if (!lip) continue;
     ctx.fillStyle = 'rgba(45,90,50,0.85)';
