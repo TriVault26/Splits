@@ -1,0 +1,49 @@
+name: Deploy famous-18 to Vercel
+
+on:
+  workflow_dispatch:
+    inputs:
+      vercel_token:
+        description: Vercel token (revoke after use)
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ inputs.vercel_token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mask token in logs
+        run: echo "::add-mask::$VERCEL_TOKEN"
+
+      - name: Deploy famous-18 as static site
+        working-directory: famous-18
+        run: |
+          url=$(npx -y vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN")
+          echo "PROD_URL=$url" >> "$GITHUB_ENV"
+          echo "DEPLOY_URL::$url"
+
+      - name: Resolve production alias
+        run: |
+          npx -y vercel@latest inspect "$PROD_URL" --token "$VERCEL_TOKEN" 2>&1 | sed -n '/Aliases/,/^$/p' || true
+
+      - name: Verify deployment
+        run: |
+          set -e
+          for base in "$PROD_URL" "https://famous-18.vercel.app"; do
+            echo "=== $base ==="
+            for path in "/" "/manifest.webmanifest" "/sw.js"; do
+              echo "-- $path"
+              curl -sSI "$base$path" | tr -d '\r' | grep -Ei '^HTTP/|^content-type' || echo "REQUEST FAILED: $base$path"
+            done
+            if curl -sS "$base/" | grep -q "18 Famous Holes"; then
+              echo "INDEX_CONTENT_OK::$base"
+            else
+              echo "INDEX_CONTENT_MISSING::$base"
+            fi
+          done
+          echo "VERIFY_DONE"
+          echo "### famous-18 deployed: $PROD_URL" >> "$GITHUB_STEP_SUMMARY"
