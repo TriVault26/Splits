@@ -115,6 +115,8 @@
   button.sys:active { transform: scale(0.96); background: rgba(255,255,255,0.18); }
   button.sys.shot { background: rgba(85,168,255,0.16); border-color: rgba(120,180,255,0.4); color: #cfe6ff; font-weight: 700; }
   button.sys.shot:disabled { opacity: 0.35; }
+  button.sys.mull { background: rgba(255,180,80,0.16); border-color: rgba(255,190,110,0.4); color: #ffd9a8; font-weight: 700; }
+  button.sys.mull:disabled { opacity: 0.32; color: #fff; }
   button.primary { padding: 12px 28px; border: none; border-radius: 12px; background: linear-gradient(135deg, #4a9eff, #2563eb); color: white; font-weight: 700; font-size: 15px; cursor: pointer; border: 1px solid transparent; box-shadow: 0 4px 14px rgba(74,158,255,0.35); }
   button.primary:active { transform: scale(0.96); }
   .overlay {
@@ -195,7 +197,7 @@
     </div>
     <div class="bottom-bar">
       <button class="sys shot" id="shotType">Shot: Full</button>
-      <button class="sys" id="retry">↻ Retee</button>
+      <button class="sys mull" id="mulligan">↺ Mulligan · 2</button>
       <button class="sys" id="skip">Skip →</button>
     </div>
   </div>
@@ -577,6 +579,7 @@ let elevYds = 0;      // green elevation vs ball, + = uphill (plays longer)
 let targetYds = 0;    // straight-line distance to the pin (yards)
 let playsYds = 0;     // effective playing distance after elevation
 let shotFeedback = '', shotFeedbackCol = '#fff', feedbackTimer = 0;  // tempo toast after a swing
+let mulligansLeft = 2;   // 2 free do-overs per 18-hole round
 // Uphill needs more club: shrinks effective carry so you swing harder.
 function elevFactor() { return clamp(1 - elevYds * 0.006, 0.82, 1.20); }
 function putterRangeYds() { return PUTTER_MAX_VEL_YPF / (1 - FRIC_GREEN); }
@@ -909,6 +912,7 @@ function loadHole(i) {
   renderShapeButtons();
   updateSwingBtn();
   updateShotTypeBtn();
+  updateMulliganBtn();
   if (gameStarted) showIntroBanner();
 }
 function resetBall(toX, toY) {
@@ -1055,7 +1059,7 @@ function handleLanding() {
     ball.vx = 0; ball.vy = 0;
     flight = null;
     phase = 'aiming';
-    shotType = 0; setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn(); updateShotTypeBtn();
+    shotType = 0; setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn(); updateShotTypeBtn(); updateMulliganBtn();
     return;
   }
   if (land === 'wall') {
@@ -1064,7 +1068,7 @@ function handleLanding() {
     ball.vx = 0; ball.vy = 0;
     flight = null;
     phase = 'aiming';
-    shotType = 0; setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn(); updateShotTypeBtn();
+    shotType = 0; setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn(); updateShotTypeBtn(); updateMulliganBtn();
     return;
   }
 
@@ -1230,7 +1234,7 @@ function update() {
       // Drop where the last shot was played from (like a stroke-and-distance replay)
       resetBall(lastShotPos.x, lastShotPos.y);
       phase = 'aiming';
-      shotType = 0; setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn(); updateShotTypeBtn();
+      shotType = 0; setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn(); updateShotTypeBtn(); updateMulliganBtn();
       return;
     }
 
@@ -1273,7 +1277,7 @@ function update() {
     if (Math.abs(ball.vx) < MIN_SPEED && Math.abs(ball.vy) < MIN_SPEED) {
       ball.vx = 0; ball.vy = 0;
       phase = 'aiming';
-      shotType = 0; setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn(); updateShotTypeBtn();
+      shotType = 0; setDefaultAim(); autoSelectClub(); updateHUD(); updateShotInfo(); renderClubRack(); updateSwingBtn(); updateShotTypeBtn(); updateMulliganBtn();
     }
     return;
   }
@@ -2468,88 +2472,137 @@ function drawGolfer3D() {
   const gy = ball.y + cam.ry * side - cam.fy * toward;
   const pf = proj(gx, gy, groundE(gx, gy));
   if (!pf || pf.z < NEARZ + 4) return;
-  const bodyH = clamp(pf.s * 2.0 * pxPerYard, 30, 260);
+  const H = clamp(pf.s * 2.0 * pxPerYard, 34, 280);
   const cx = pf.x, feetY = pf.y;
 
+  // Swing coil: shoulders turn away on the backswing and through on the finish.
+  let coil = 0;
+  if (swing.active) coil = lerp(-0.9, 0.7, clamp(swing.t / swing.dur, 0, 1));
+  else if (phase === 'meter' && meter) coil = -0.9 * (meter.stage === 'power' ? meter.v : 1);
+  else coil = Math.sin(time * 0.05) * 0.04;
+
+  // Palette — tour look: white cap, red polo, stone trousers.
+  const skin = '#ca9b73', skinSh = '#a87f57';
+  const polo = '#c8402f', poloSh = '#9c2c20', poloHi = '#e2725f';
+  const trou = '#cbb78c', trouSh = '#a8946a';
+  const shoe = '#f2f2f2', cap = '#f5f5f5', capSh = '#d2d2d2';
+  const R = (x) => Math.max(0.6, x);
+
   ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
   // Ground shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.30)';
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
   ctx.beginPath();
-  ctx.ellipse(cx, feetY, bodyH * 0.28, bodyH * 0.07, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, feetY, H * 0.30, H * 0.07, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  const hipY = feetY - bodyH * 0.46;
-  const shoY = feetY - bodyH * 0.86;
-  const headY = feetY - bodyH * 0.97;
-  const lw = Math.max(2, bodyH * 0.085);
-  const body = '#12201b';
-  const rim = 'rgba(150,220,170,0.35)';
+  // Key body points (golfer bent over the ball to camera-left)
+  const hipX = cx - H * 0.02, hipY = feetY - H * 0.44;
+  const shoX = cx - H * 0.12 + coil * H * 0.05, shoY = feetY - H * 0.80;
+  const headX = shoX - H * 0.03 + coil * H * 0.03, headY = feetY - H * 0.90;
+  const shoulderW = H * 0.13 * (1 - Math.abs(coil) * 0.25);
 
-  // Legs (slight athletic stance)
-  ctx.strokeStyle = body;
-  ctx.lineWidth = lw;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(cx - bodyH * 0.02, hipY); ctx.lineTo(cx - bodyH * 0.14, feetY);
-  ctx.moveTo(cx + bodyH * 0.04, hipY); ctx.lineTo(cx + bodyH * 0.16, feetY);
-  ctx.stroke();
+  // ---- Legs (trousers) with a slight knee bend + shoes ----
+  const foot = [[-0.15, trouSh], [0.16, trou]];
+  for (const [fx, col] of foot) {
+    const footX = cx + H * fx, kneeX = cx + H * fx * 0.6;
+    ctx.strokeStyle = col; ctx.lineWidth = R(H * 0.11);
+    ctx.beginPath();
+    ctx.moveTo(hipX + H * fx * 0.3, hipY);
+    ctx.quadraticCurveTo(kneeX, feetY - H * 0.20, footX, feetY - H * 0.02);
+    ctx.stroke();
+    // shoe
+    ctx.fillStyle = shoe;
+    ctx.beginPath();
+    ctx.ellipse(footX - H * 0.02, feetY, H * 0.07, H * 0.035, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-  // Torso — bent slightly forward over the ball
-  const leanX = bodyH * 0.10;
-  ctx.strokeStyle = body;
-  ctx.lineWidth = lw * 1.5;
-  ctx.beginPath();
-  ctx.moveTo(cx, hipY);
-  ctx.lineTo(cx - leanX, shoY);
-  ctx.stroke();
+  // ---- Hips / belt ----
+  ctx.strokeStyle = trouSh; ctx.lineWidth = R(H * 0.14);
+  ctx.beginPath(); ctx.moveTo(hipX - H * 0.05, hipY); ctx.lineTo(hipX + H * 0.06, hipY); ctx.stroke();
 
-  // Head
-  const shoX = cx - leanX;
-  ctx.fillStyle = body;
+  // ---- Torso (polo shirt) as a shaded tapered shape ----
+  const torso = [
+    { x: hipX - H * 0.07, y: hipY + H * 0.02 },
+    { x: hipX + H * 0.07, y: hipY + H * 0.02 },
+    { x: shoX + shoulderW, y: shoY + H * 0.02 },
+    { x: shoX - shoulderW, y: shoY }
+  ];
+  ctx.fillStyle = polo;
   ctx.beginPath();
-  ctx.arc(shoX - bodyH * 0.02, headY, bodyH * 0.095, 0, Math.PI * 2);
-  ctx.fill();
-  // Cap brim
-  ctx.strokeStyle = body;
-  ctx.lineWidth = lw * 0.7;
+  ctx.moveTo(torso[0].x, torso[0].y);
+  ctx.quadraticCurveTo(hipX, hipY - H * 0.02, torso[1].x, torso[1].y);
+  ctx.lineTo(torso[2].x, torso[2].y);
+  ctx.quadraticCurveTo(shoX, shoY - H * 0.05, torso[3].x, torso[3].y);
+  ctx.closePath(); ctx.fill();
+  // shading: dark spine side (right/back), highlight on the lit left
+  ctx.fillStyle = poloSh; ctx.globalAlpha = 0.55;
   ctx.beginPath();
-  ctx.moveTo(shoX - bodyH * 0.02, headY - bodyH * 0.04);
-  ctx.lineTo(shoX - bodyH * 0.16, headY - bodyH * 0.05);
-  ctx.stroke();
+  ctx.moveTo(hipX + H * 0.02, hipY); ctx.lineTo(torso[1].x, torso[1].y);
+  ctx.lineTo(torso[2].x, torso[2].y); ctx.lineTo(shoX + H * 0.02, shoY);
+  ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = poloHi; ctx.lineWidth = R(H * 0.02);
+  ctx.beginPath(); ctx.moveTo(hipX - H * 0.05, hipY); ctx.lineTo(shoX - shoulderW * 0.7, shoY + H * 0.02); ctx.stroke();
 
-  // Arms + club
+  // ---- Club angle + hands (orbit around the sternum) ----
   const ang = golferClubAngle() * Math.PI / 180;
   const dx = Math.sin(ang), dy = -Math.cos(ang);
-  const handLen = bodyH * 0.30;
-  const handX = shoX + dx * handLen * 0.5 - bodyH * 0.02;
-  const handY = shoY + bodyH * 0.16 + dy * handLen * 0.3;
-  ctx.strokeStyle = body;
-  ctx.lineWidth = lw;
+  const pivotX = shoX + H * 0.02, pivotY = shoY + H * 0.12;
+  const reach = H * 0.30;
+  const handX = pivotX + dx * reach, handY = pivotY + dy * reach;
+
+  // ---- Club (behind near arm): shaft + grip + head ----
+  const clubLen = isPutter ? H * 0.55 : H * 0.95;
+  ctx.strokeStyle = '#20242a'; ctx.lineWidth = R(H * 0.035);   // grip
+  ctx.beginPath(); ctx.moveTo(handX, handY); ctx.lineTo(handX + dx * clubLen * 0.18, handY + dy * clubLen * 0.18); ctx.stroke();
+  ctx.strokeStyle = '#d3dade'; ctx.lineWidth = R(H * 0.025);   // steel shaft
+  ctx.beginPath(); ctx.moveTo(handX + dx * clubLen * 0.18, handY + dy * clubLen * 0.18); ctx.lineTo(handX + dx * clubLen, handY + dy * clubLen); ctx.stroke();
+  ctx.fillStyle = '#b9c0c6';                                   // club head
   ctx.beginPath();
-  ctx.moveTo(shoX, shoY + bodyH * 0.04);
-  ctx.lineTo(handX, handY);
-  ctx.stroke();
-  // Club shaft
-  const clubLen = isPutter ? bodyH * 0.5 : bodyH * 0.92;
-  ctx.strokeStyle = '#d8dde0';
-  ctx.lineWidth = Math.max(1.2, bodyH * 0.03);
-  ctx.beginPath();
-  ctx.moveTo(handX, handY);
-  ctx.lineTo(handX + dx * clubLen, handY + dy * clubLen);
-  ctx.stroke();
-  // Club head
-  ctx.fillStyle = '#c2c8cc';
-  ctx.beginPath();
-  ctx.arc(handX + dx * clubLen, handY + dy * clubLen, Math.max(1.4, bodyH * 0.04), 0, Math.PI * 2);
+  ctx.ellipse(handX + dx * clubLen, handY + dy * clubLen, R(H * 0.055), R(H * 0.03), ang, 0, Math.PI * 2);
   ctx.fill();
 
-  // Rim light down the back edge for a lit silhouette
-  ctx.strokeStyle = rim;
-  ctx.lineWidth = Math.max(1, bodyH * 0.02);
+  // ---- Arms (skin, short polo sleeves) from both shoulders to the hands ----
+  const armCol = skin;
+  for (const s of [-1, 1]) {
+    const sx = shoX + s * shoulderW * 0.8, sy = shoY + H * 0.03;
+    ctx.strokeStyle = (s < 0) ? skinSh : armCol; ctx.lineWidth = R(H * 0.06);
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.quadraticCurveTo((sx + handX) / 2, (sy + handY) / 2 - H * 0.02, handX, handY);
+    ctx.stroke();
+    // sleeve cap
+    ctx.fillStyle = (s < 0) ? poloSh : polo;
+    ctx.beginPath(); ctx.arc(sx, sy, R(H * 0.045), 0, Math.PI * 2); ctx.fill();
+  }
+  // hands
+  ctx.fillStyle = skinSh;
+  ctx.beginPath(); ctx.arc(handX, handY, R(H * 0.04), 0, Math.PI * 2); ctx.fill();
+
+  // ---- Shoulders cap ----
+  ctx.fillStyle = polo;
+  ctx.beginPath(); ctx.ellipse(shoX, shoY + H * 0.01, shoulderW, H * 0.05, 0, 0, Math.PI * 2); ctx.fill();
+
+  // ---- Neck + head + cap ----
+  ctx.strokeStyle = skinSh; ctx.lineWidth = R(H * 0.05);
+  ctx.beginPath(); ctx.moveTo(shoX, shoY); ctx.lineTo(headX, headY + H * 0.06); ctx.stroke();
+  const hr = H * 0.078;
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = skinSh; ctx.globalAlpha = 0.5;
+  ctx.beginPath(); ctx.arc(headX + hr * 0.35, headY, hr, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  // cap dome + brim (brim points toward the ball / camera-left)
+  ctx.fillStyle = cap;
+  ctx.beginPath(); ctx.arc(headX, headY - hr * 0.35, hr * 1.02, Math.PI, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = capSh;
   ctx.beginPath();
-  ctx.moveTo(cx + bodyH * 0.03, hipY);
-  ctx.lineTo(shoX + bodyH * 0.05, shoY);
-  ctx.stroke();
+  ctx.ellipse(headX - hr * 1.1, headY - hr * 0.35, hr * 0.9, hr * 0.34, 0, 0, Math.PI * 2);
+  ctx.fill();
+
   ctx.restore();
 }
 
@@ -3625,6 +3678,7 @@ function startMeter() {
   swing = { active: false, t: 0, dur: club.isPutter ? 12 : 20, putt: club.isPutter };
   phase = 'meter';
   updateSwingBtn();
+  updateMulliganBtn();
 }
 // The Swing button drives the whole swing: start meter → set power → strike.
 function swingButtonPress() {
@@ -3668,6 +3722,30 @@ function cycleShotType() {
   shotType = avail[(cur + 1) % avail.length];
   playTick();
   updateShotTypeBtn(); updateShotInfo();
+}
+// A mulligan replays your last shot: ball back to where it was struck from,
+// one stroke rubbed off. Two per round — no more.
+function canMulligan() {
+  return phase === 'aiming' && mulligansLeft > 0 && strokes >= 1;
+}
+function useMulligan() {
+  if (!canMulligan()) return;
+  mulligansLeft--;
+  strokes--;
+  ball.x = lastShotPos.x; ball.y = lastShotPos.y; ball.vx = 0; ball.vy = 0;
+  trail = [];
+  setFeedback('Mulligan — ' + mulligansLeft + ' left', '#ffd9a8');
+  playTick();
+  snapCamera();
+  shotType = 0; setDefaultAim(); autoSelectClub();
+  updateHUD(); updateShotInfo(); renderClubRack();
+  updateSwingBtn(); updateShotTypeBtn(); updateMulliganBtn();
+}
+function updateMulliganBtn() {
+  const btn = document.getElementById('mulligan');
+  if (!btn) return;
+  btn.textContent = '↺ Mulligan · ' + mulligansLeft;
+  btn.disabled = !canMulligan();
 }
 function meterTap() {
   if (!meter) return;
@@ -3762,9 +3840,8 @@ document.getElementById('shotType').addEventListener('click', () => {
   if (phase !== 'aiming') return;
   cycleShotType();
 });
-document.getElementById('retry').addEventListener('click', () => {
-  if (phase === 'flying' || phase === 'rolling' || phase === 'holed') return;
-  loadHole(currentHole);
+document.getElementById('mulligan').addEventListener('click', () => {
+  useMulligan();
 });
 document.getElementById('skip').addEventListener('click', () => {
   if (phase === 'holed') return;
@@ -3776,11 +3853,13 @@ document.getElementById('startBtn').addEventListener('click', () => {
   initAudio();
   document.getElementById('startOverlay').classList.add('hidden');
   gameStarted = true;
+  mulligansLeft = 2;
   loadHole(0);
 });
 document.getElementById('againBtn').addEventListener('click', () => {
   scores = new Array(HOLES.length).fill(null);
   document.getElementById('endOverlay').classList.add('hidden');
+  mulligansLeft = 2;
   loadHole(0);
 });
 
