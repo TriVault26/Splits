@@ -1175,7 +1175,7 @@ function update() {
   }
 
   if (phase === 'meter') {
-    meter.v += meter.dir * meter.speed * (meter.stage === 'acc' ? 1.15 : 1);
+    meter.v += meter.dir * meter.speed * (meter.stage === 'acc' ? 1.0 : 1);
     if (meter.stage === 'power') {
       if (meter.v >= 1) { meter.v = 1; meter.dir = -1; }
       else if (meter.v <= 0 && meter.dir < 0) {
@@ -3618,9 +3618,9 @@ function drawMeter() {
     ctx.stroke();
   }
 
-  // Strike line + perfect zone at bottom
+  // Strike line + perfect zone at bottom (matches the ding window: |v|<0.065)
   ctx.fillStyle = 'rgba(120, 255, 150, 0.35)';
-  ctx.fillRect(barX - 3 * US, vToY(0.045), barW + 6 * US, vToY(-0.045) - vToY(0.045));
+  ctx.fillRect(barX - 3 * US, vToY(0.065), barW + 6 * US, vToY(-0.065) - vToY(0.065));
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 2.5 * US;
   ctx.beginPath();
@@ -3671,10 +3671,11 @@ function shadeColor(hex, amt) { const {r,g,b} = hexToRgb(hex); return rgbToHex(r
 function startMeter() {
   const club = CLUBS[selectedClub];
   const lie = getTerrainKind(ball.x, ball.y);
-  // Meter runs faster from bad lies and with the big sticks — harder to time
-  const lieFac  = lie === 'sand' ? 1.45 : lie === 'rough' ? 1.22 : 1;
-  const clubFac = club.isPutter ? 0.55 : club.y >= 250 ? 1.18 : club.y <= 110 ? 0.9 : 1;
-  meter = { stage: 'power', v: 0, dir: 1, speed: 0.020 * lieFac * clubFac, power: null };
+  // Meter runs faster from bad lies and with the big sticks — harder to time.
+  // Base speed is gentle; rough and bunkers noticeably speed it up.
+  const lieFac  = lie === 'sand' ? 1.6 : lie === 'rough' ? 1.32 : 1;
+  const clubFac = club.isPutter ? 0.5 : club.y >= 250 ? 1.1 : club.y <= 110 ? 0.88 : 1;
+  meter = { stage: 'power', v: 0, dir: 1, speed: 0.0135 * lieFac * clubFac, power: null };
   swing = { active: false, t: 0, dur: club.isPutter ? 12 : 20, putt: club.isPutter };
   phase = 'meter';
   updateSwingBtn();
@@ -3769,8 +3770,8 @@ function fireMeterShot(needleV) {
   meter = null;
   // Tempo feedback (WGT-style ding): perfect timing dings; otherwise push/pull
   const mag = Math.abs(strike);
-  if (mag < 0.09) { setFeedback('DING! · PERFECT', '#37e0ff'); playDing(); }
-  else if (mag < 0.28) { setFeedback(strike > 0 ? 'slight push' : 'slight pull', '#e8cb48'); playTick(); }
+  if (mag < 0.13) { setFeedback('DING! · PERFECT', '#37e0ff'); playDing(); }
+  else if (mag < 0.32) { setFeedback(strike > 0 ? 'slight push' : 'slight pull', '#e8cb48'); playTick(); }
   else { setFeedback(strike > 0 ? 'PUSHED right' : 'PULLED left', '#ff9b9b'); playTick(); }
   // Kick off the golfer's downswing / follow-through
   swing = { active: true, t: 0, dur: wasPutter ? 12 : 20, putt: wasPutter };
