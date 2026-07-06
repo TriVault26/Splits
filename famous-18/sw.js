@@ -1,5 +1,5 @@
 // Minimal offline-first service worker
-const CACHE = 'famous18-v11';
+const CACHE = 'famous18-v12';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
