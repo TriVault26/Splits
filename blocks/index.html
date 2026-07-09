@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLOCKS. — the honest training plan</title>
+<meta name="description" content="Your race date, reverse-engineered into the weeks that get you there. Periodised triathlon sessions with real paces, power and send-offs.">
+<meta name="theme-color" content="#14171A">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="BLOCKS.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="mast">
+    <div class="mast-row"><h1>Blocks<span class="dot">.</span></h1><span class="ver">Companion to Splits.</span></div>
+    <p>The honest training plan. Your race date in — a periodised block of weekly sessions out, at paces and power you can actually hold.</p>
+    <div class="tick"><i class="s"></i><i class="b"></i><i class="r"></i></div>
+  </header>
+
+  <!-- ============================ SETUP ============================ -->
+  <section class="card hero">
+    <div class="card-head"><div class="eyebrow">The race<small>what you're building toward</small></div></div>
+    <div class="card-body">
+      <div class="seg" id="distseg" role="tablist">
+        <button role="tab" data-d="Sprint">Sprint</button><button role="tab" data-d="Olympic">Olympic</button>
+        <button role="tab" data-d="70.3">70.3</button><button role="tab" data-d="Ironman">Ironman</button>
+      </div>
+      <div class="pg">
+        <div class="mf"><label>Race date</label><input id="racedate" type="date"></div>
+        <div class="mf sm"><label>Days / wk</label><select id="days"><option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option></select></div>
+        <div class="mf sm"><label>Peak hrs</label><input id="hours" placeholder="auto" inputmode="numeric"></div>
+        <div class="mf"><label>Goal finish</label><input id="goal" placeholder="optional" inputmode="numeric"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-t">Your fitness today</div>
+        <div class="pg">
+          <div class="mf"><label>Run race</label><select id="cfrund"><option value="5000" selected>5 km</option><option value="10000">10 km</option><option value="21097.5">Half</option></select></div>
+          <div class="mf sm"><label>Run time</label><input id="cf5k" placeholder="22:30" inputmode="numeric"></div>
+          <div class="mf sm"><label>400 swim</label><input id="cf400" placeholder="6:24" inputmode="numeric"></div>
+          <div class="mf sm"><label>200 swim</label><input id="cf200" placeholder="3:00" inputmode="numeric"></div>
+          <div class="mf sm"><label>FTP w</label><input id="cftp" placeholder="225" inputmode="numeric"></div>
+        </div>
+        <p class="hintline">400 &amp; 200 give your CSS swim threshold; the run race gives VDOT; FTP sets your power. Leave any blank and those sessions show structure without numbers.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ VERDICT ============================ -->
+  <section class="card">
+    <div class="card-head"><div class="eyebrow">The verdict<small>can these weeks get you there</small></div></div>
+    <div class="card-body">
+      <div class="synthline" id="synth">Pick a race distance and date to build your block.</div>
+      <div class="projgrid" id="projgrid"></div>
+      <div class="predict" id="predict" style="display:none"><span class="pl">Projected finish</span><span class="pv" id="predv">–</span><span class="chip" id="predchip"></span></div>
+      <div id="vnote"></div>
+    </div>
+  </section>
+
+  <!-- ============================ PLAN ============================ -->
+  <section class="card">
+    <div class="card-head"><div class="eyebrow">The block<small id="blocksub">week by week to race day</small></div></div>
+    <div class="card-body">
+      <div class="phaselegend">
+        <span><i class="ph-Base"></i>Base</span><span><i class="ph-Build"></i>Build</span>
+        <span><i class="ph-Peak"></i>Peak</span><span><i class="ph-Taper"></i>Taper</span>
+        <span><i class="ph-Race"></i>Race</span><span style="color:var(--muted)">▨ deload</span>
+      </div>
+      <div class="phasebar" id="phasebar"></div>
+      <div id="weeks"></div>
+    </div>
+  </section>
+
+  <!-- ============================ ZONES ============================ -->
+  <details class="reveal"><summary><span class="rvt">Your zones</span><span class="plus"></span><span class="rvs">The paces, power and send-offs every session pulls from — straight off your fitness above.</span></summary><div class="rv-body" id="zones"></div></details>
+
+  <p class="foot">Estimates from population defaults, not a coach who's watched you train — the projection assumes ~85% consistency and no missed blocks. Sessions are built off your <b>current</b> fitness; retest every 4–6 weeks and update the numbers. Same engine as <a href="../">Splits.</a> — Daniels VDOT for the run, CSS for the swim, Coggan power for the bike. Calibrate the improvement rates and overbike ceilings to the athlete in front of you.</p>
+
+</div>
+<script src="app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "BLOCKS. — the honest training plan",
+  "short_name": "BLOCKS.",
+  "description": "Your race date, reverse-engineered into the weeks that get you there.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#F4F2EA",
+  "theme_color": "#14171A",
+  "icons": [
+    {"src":"icon-192.png","sizes":"192x192","type":"image/png"},
+    {"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
+}
