@@ -1,0 +1,49 @@
+name: Deploy blocks to Vercel
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['blocks/**']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secret present
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN secret is not set. Add it in repo Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+      - name: Deploy blocks as static site
+        working-directory: blocks
+        run: |
+          url=$(npx -y vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN")
+          echo "PROD_URL=$url" >> "$GITHUB_ENV"
+          echo "DEPLOY_URL::$url"
+
+      - name: Resolve production alias
+        run: |
+          npx -y vercel@latest inspect "$PROD_URL" --token "$VERCEL_TOKEN" 2>&1 | sed -n '/Aliases/,/^$/p' || true
+
+      - name: Verify deployment
+        run: |
+          set -e
+          echo "=== $PROD_URL ==="
+          for path in "/" "/manifest.webmanifest" "/sw.js"; do
+            echo "-- $path"
+            curl -sSI "$PROD_URL$path" | tr -d '\r' | grep -Ei '^HTTP/|^content-type' || echo "REQUEST FAILED: $PROD_URL$path"
+          done
+          if curl -sS "$PROD_URL/" | grep -q "Two Islands Endurance"; then
+            echo "INDEX_CONTENT_OK::$PROD_URL"
+          else
+            echo "INDEX_CONTENT_MISSING::$PROD_URL"
+          fi
+          echo "VERIFY_DONE"
+          echo "### blocks deployed: $PROD_URL" >> "$GITHUB_STEP_SUMMARY"
