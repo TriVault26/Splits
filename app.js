@@ -256,7 +256,7 @@ function computeRace(){
   if(legD.bike){const v=legD.bike/goalT.bike,w=powerFromSpeed(v,m);req.ftp=w/d.IF;req.bikeW=w;actualIF=(isFinite(curFTP)&&curFTP>0)?w/curFTP:NaN;}
   if(legD.run){const gp=goalT.run/(legD.run/1000),pen=runPenalty(curDist,isFinite(actualIF)?actualIF:CEIL[curDist]);
     req.runPace=gp;req.pen=pen;req.freshPace=gp-pen;req.vdot=vdotFromRace(legD.run,(gp-pen)*(legD.run/1000));}
-  const V=renderGap(req,{curCSS,curFTP,curVDOT},weeks);$('synth').textContent=synthLine(V);renderCouple(req,actualIF,curFTP,legD);renderCutoffs(goalT,total);renderSplits(req,legD,m);renderReq(req);
+  const V=renderGap(req,{curCSS,curFTP,curVDOT},weeks);$('synth').textContent=synthLine(V);renderAchieve({curCSS,curFTP,curVDOT},weeks,legD,goalT,m,total);renderCouple(req,actualIF,curFTP,legD);renderCutoffs(goalT,total);renderSplits(req,legD,m);renderReq(req);
 }
 function renderGap(req,cur,weeks){
   const V={};
@@ -288,6 +288,31 @@ function synthLine(V){
   const list=a=>a.join(' and ');
   if(bads.length)return `The ${list(bads)} doesn\u2019t add up${warns.length?`; ${list(warns)} is tight`:''} — here\u2019s why.`;
   return `The ${list(warns)} is a stretch — the rest is there.`;
+}
+function renderAchieve(cur,weeks,legD,goalT,m,total){
+  const el=$('achieve'),d=DIST[curDist],cond=$('swimcond').value;
+  const ready=isFinite(cur.curCSS)&&cur.curCSS>0&&isFinite(cur.curFTP)&&cur.curFTP>0&&isFinite(cur.curVDOT)&&legD.swim&&legD.bike&&legD.run;
+  if(!ready){el.innerHTML='';return;}
+  const t1=goalT.t1||parseTime(d.def[1]),t2=goalT.t2||parseTime(d.def[3]);
+  // project fitness forward at the same weekly rates the verdicts use:
+  // f=0.6 is the sustainable "on track" trajectory, f=1.0 the stretch ceiling
+  const proj=f=>{
+    const css=cur.curCSS-RATE.swim*weeks*f;
+    const ftp=cur.curFTP*(1+RATE.bike*weeks*f/100);
+    const vd=cur.curVDOT+RATE.run*weeks*f;
+    const swim=(css+d.swimOff-(SWIMCOND[cond]||0))*legD.swim/100;
+    const bike=legD.bike/speedFromPower(ftp*d.IF,m);
+    const run=(timeForVdot(legD.run,vd)/(legD.run/1000)+runPenalty(curDist,d.IF))*(legD.run/1000);
+    return {swim,bike,run,tot:swim+t1+bike+t2+run};
+  };
+  const A=proj(0.6),B=proj(1.0);
+  let cls,line;
+  if(total>=A.tot)      {cls='ok';  line=`Your <span class="cmono">${fmt(total)}</span> goal sits <span class="cmono">${fmt(total-A.tot)}</span> inside the steady build — honest.`;}
+  else if(total>=B.tot) {cls='warn';line=`Your <span class="cmono">${fmt(total)}</span> goal needs the stretch build — <span class="cmono">${fmt(A.tot-total)}</span> faster than steady training gets you.`;}
+  else                  {cls='bad'; line=`Your <span class="cmono">${fmt(total)}</span> goal is <span class="cmono">${fmt(B.tot-total)}</span> beyond even the stretch build — this is what the distance gives you today.`;}
+  el.innerHTML=`<div class="rvsec">Achievable in ${weeks} wks</div><div class="callout ${cls}"><span class="ctag">Prediction · from your numbers today</span>
+    <div>Steady build <span class="cmono">${fmt(A.tot)}</span> · everything lands <span class="cmono">${fmt(B.tot)}</span>. ${line}</div>
+    <div style="margin-top:6px;color:var(--muted);font-size:12px">Steady build splits: swim ${fmt(A.swim)} · bike ${fmt(A.bike)} · run ${fmt(A.run)} + transitions.</div></div>`;
 }
 function renderCouple(req,actualIF,curFTP,legD){
   if(!legD.bike||!legD.run||!isFinite(req.vdot)){$('couple').innerHTML='';return;}
