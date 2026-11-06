@@ -1,5 +1,7 @@
-// Minimal offline-first service worker
-const CACHE = 'mini18-v4';
+// Mini 18 service worker — network-first for the page, cache-first for assets.
+// Network-first on the HTML means a new deploy shows up immediately when online,
+// instead of being pinned to an old cached copy; it still works offline via cache.
+const CACHE = 'mini18-v5';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -12,11 +14,27 @@ self.addEventListener('activate', (e) => {
   );
 });
 self.addEventListener('fetch', (e) => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const isDoc = req.mode === 'navigate' || req.destination === 'document';
+  if (isDoc) {
+    // Network-first: always try the network for the page, update the cache,
+    // and only fall back to the cached copy when offline.
+    e.respondWith(
+      fetch(req).then(res => {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put('./index.html', copy));
+        return res;
+      }).catch(() => caches.match(req).then(hit => hit || caches.match('./index.html')))
+    );
+    return;
+  }
+  // Cache-first for static assets (icons, manifest), refreshing in the background.
   e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+    caches.match(req).then(hit => hit || fetch(req).then(res => {
       const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copy));
+      caches.open(CACHE).then(c => c.put(req, copy));
       return res;
-    }).catch(() => caches.match('./index.html')))
+    }))
   );
 });
