@@ -154,173 +154,186 @@ function polyWalls(pts){ const o=[]; for(let i=0;i<pts.length;i++){ const a=pts[
 //   slopes:[{x,y,w,h,ax,ay}]   mills:[{x,y,r,sp,blades,gap}]
 //   spin:[{x,y,r,len,sp}]   warps:[{ax,ay,bx,by,r}]
 // ======================================================================
-function H01(){ // Augusta 12 "Golden Bell" — water across, bunkers behind
-  return { course:'Augusta National', name:'Golden Bell', hole:12, par:2,
+function H01(){ // Augusta 12 "Golden Bell" — creek carry to an offset bridge, tucked cup
+  return { course:'Augusta National', name:'Golden Bell', hole:12, par:3,
     fair:[{x:60,y:60,w:360,h:600}],
-    walls: boxWalls(60,60,360,600),
-    tee:{x:240,y:600}, cup:{x:240,y:150},
-    water:[{x:60,y:300,w:360,h:70}],
-    bridge:[{x:210,y:300,w:60,h:70}],
-    sand:[{x:120,y:95,w:90,h:34},{x:270,y:95,w:90,h:34}],
+    walls:[...boxWalls(60,60,360,600), seg(150,210,150,150), seg(300,150,300,210)],
+    tee:{x:240,y:600}, cup:{x:200,y:135},
+    water:[{x:60,y:300,w:360,h:66}],
+    bridge:[{x:300,y:300,w:46,h:66}],
+    sand:[{x:150,y:195,w:120,h:30},{x:300,y:200,w:70,h:28}],
+    bumpers:[{x:330,y:235,r:13}],
     decor:'azalea' };
 }
-function H02(){ // Pebble 7 — cliff on the left (open to ocean), short
-  return { course:'Pebble Beach', name:"Cliff's Edge", hole:7, par:2,
+function H02(){ // Pebble 7 — hug the cliff: a baffle forces you past the ocean edge
+  return { course:'Pebble Beach', name:"Cliff's Edge", hole:7, par:3,
     fair:[{x:150,y:60,w:220,h:600}],
-    walls:[ seg(150,60,370,60), seg(370,60,370,660), seg(370,660,150,660) ], // left open to water
-    tee:{x:250,y:600}, cup:{x:250,y:170},
+    walls:[ seg(150,60,370,60), seg(370,60,370,660), seg(370,660,150,660), seg(370,380,250,380) ],
+    tee:{x:300,y:600}, cup:{x:205,y:150},
     water:[{x:0,y:60,w:150,h:600}],
-    sand:[{x:280,y:300,w:50,h:28}],
+    sand:[{x:250,y:220,w:60,h:28}],
+    bumpers:[{x:330,y:470,r:13}],
     decor:'ocean-left' };
 }
-function H03(){ // Sawgrass 17 — island green, water all round, a thin land bridge
+function H03(){ // Sawgrass 17 — island green, angled bridge, cup in the back corner
   return { course:'TPC Sawgrass', name:'Island Green', hole:17, par:3,
-    tee:{x:240,y:610}, cup:{x:240,y:210},
+    tee:{x:240,y:610}, cup:{x:295,y:185},
     walls: boxWalls(30,90,420,580),
     water:[{x:30,y:110,w:420,h:470}],
-    land:[{x:150,y:140,w:180,h:180},{x:218,y:318,w:44,h:246},{x:160,y:560,w:160,h:100}],
+    land:[{x:150,y:140,w:180,h:180},{x:214,y:318,w:40,h:246},{x:160,y:560,w:160,h:100}],
+    bumpers:[{x:185,y:200,r:13}],
     decor:'island' };
 }
-function H04(){ // St Andrews 17 "Road Hole" — dogleg around the hotel block
-  return { course:'St Andrews', name:'Road Hole', hole:17, par:3,
+function H04(){ // St Andrews 17 "Road Hole" — dogleg round the hotel, Road bunker + back wall
+  return { course:'St Andrews', name:'Road Hole', hole:17, par:4,
     fair:[{x:60,y:430,w:360,h:230},{x:250,y:120,w:170,h:340}],
     walls:[ seg(60,430,60,660), seg(60,660,420,660), seg(420,660,420,120), seg(420,120,250,120),
             seg(250,120,250,430), seg(250,430,60,430) ],
-    hotel:[{x:70,y:150,w:150,h:230}],
-    tee:{x:140,y:610}, cup:{x:335,y:190},
-    sand:[{x:300,y:250,w:34,h:34}],
-    road:[{x:250,y:120,w:170,h:16}],
+    hotel:[{x:70,y:160,w:150,h:230}],
+    tee:{x:130,y:610}, cup:{x:345,y:200},
+    sand:[{x:300,y:238,w:52,h:34}],
+    road:[{x:250,y:124,w:170,h:14}],
+    bumpers:[{x:390,y:300,r:12}],
     decor:'links' };
 }
-function H05(){ // Troon 8 "Postage Stamp" — tiny green ringed by bunkers
-  return { course:'Royal Troon', name:'Postage Stamp', hole:8, par:2,
+function H05(){ // Troon 8 "Postage Stamp" — tiny green, funnel baffles, deep bunkers
+  return { course:'Royal Troon', name:'Postage Stamp', hole:8, par:3,
     fair:[{x:90,y:60,w:300,h:600}],
-    walls:boxWalls(90,60,300,600),
-    tee:{x:240,y:600}, cup:{x:240,y:170},
-    sand:[{x:150,y:120,w:70,h:40},{x:260,y:120,w:70,h:40},{x:150,y:200,w:70,h:38},{x:260,y:200,w:70,h:38},
-          {x:200,y:118,w:80,h:24}],
+    walls:[...boxWalls(90,60,300,600), seg(150,250,205,195), seg(330,250,275,195)],
+    tee:{x:240,y:600}, cup:{x:240,y:150},
+    sand:[{x:120,y:120,w:70,h:46},{x:290,y:120,w:70,h:46},{x:120,y:210,w:60,h:40},{x:300,y:210,w:60,h:40}],
     decor:'links' };
 }
-function H06(){ // Oakmont 3 "Church Pews" — rows of wall "pews" to thread
-  const pews=[]; for(let i=0;i<5;i++){ const y=250+i*62; pews.push(seg(120,y,300,y)); }
-  return { course:'Oakmont', name:'Church Pews', hole:3, par:3,
-    fair:[{x:60,y:60,w:360,h:600}],
-    walls:[...boxWalls(60,60,360,600), ...pews],
-    pews:[{x:120,y:244,w:180,h:12},{x:120,y:306,w:180,h:12},{x:120,y:368,w:180,h:12},{x:120,y:430,w:180,h:12},{x:120,y:492,w:180,h:12}],
-    tee:{x:360,y:600}, cup:{x:150,y:150},
+function H06(){ // Oakmont 3 "Church Pews" — staggered pews force a snake route
+  const walls=[...boxWalls(60,60,360,600)]; const pews=[]; const ys=[510,430,350,270,190];
+  for(let i=0;i<ys.length;i++){ const y=ys[i];
+    if(i%2===0){ walls.push(seg(60,y,300,y)); pews.push({x:60,y:y-6,w:240,h:12}); }
+    else { walls.push(seg(180,y,420,y)); pews.push({x:180,y:y-6,w:240,h:12}); } }
+  return { course:'Oakmont', name:'Church Pews', hole:3, par:4,
+    walls, pews, fair:[{x:60,y:60,w:360,h:600}],
+    tee:{x:360,y:610}, cup:{x:240,y:120},
     decor:'classic' };
 }
-function H07(){ // Augusta 13 "Azalea" — dogleg left with a creek + bumpers
+function H07(){ // Augusta 13 "Azalea" — dogleg left, corner creek, azalea bumpers
   return { course:'Augusta National', name:'Azalea', hole:13, par:3,
-    fair:[{x:60,y:420,w:360,h:240},{x:60,y:120,w:230,h:320}],
-    walls:[ seg(60,420,60,120), seg(60,120,290,120), seg(290,120,290,420),
-            seg(290,420,420,420), seg(420,420,420,660), seg(420,660,60,660), seg(60,660,60,420) ],
-    tee:{x:360,y:600}, cup:{x:170,y:180},
-    water:[{x:290,y:300,w:130,h:40}],
-    bumpers:[{x:175,y:430,r:16},{x:120,y:330,r:14}],
+    fair:[{x:60,y:420,w:360,h:240},{x:60,y:120,w:240,h:320}],
+    walls:[ seg(60,420,60,120), seg(60,120,300,120), seg(300,120,300,420),
+            seg(300,420,420,420), seg(420,420,420,660), seg(420,660,60,660), seg(60,660,60,420) ],
+    tee:{x:360,y:600}, cup:{x:150,y:180},
+    water:[{x:300,y:300,w:120,h:40}],
+    sand:[{x:120,y:430,w:70,h:34}],
+    bumpers:[{x:200,y:440,r:15},{x:110,y:300,r:13},{x:250,y:220,r:12}],
     decor:'azalea' };
 }
-function H08(){ // Cypress 16 — carry over big water, carom bumper
+function H08(){ // Cypress 16 — Pacific carry to an island, carom bumpers, corner cup
   return { course:'Cypress Point', name:'Pacific Carry', hole:16, par:3,
-    tee:{x:240,y:610}, cup:{x:300,y:185},
+    tee:{x:240,y:610}, cup:{x:315,y:170},
     walls: boxWalls(30,90,420,580),
     water:[{x:30,y:100,w:420,h:480}],
     land:[{x:120,y:120,w:240,h:170},{x:205,y:288,w:60,h:280},{x:150,y:560,w:200,h:100}],
-    bumpers:[{x:165,y:210,r:17}],
+    bumpers:[{x:160,y:200,r:16},{x:300,y:250,r:13}],
     decor:'ocean' };
 }
-function H09(){ // The Windmill — classic timing gate
+function H09(){ // The Windmill — a spinning hazard in the open: time it or go round
   return { course:'The Old Course', name:'The Windmill', hole:9, par:3,
     fair:[{x:60,y:60,w:360,h:600}],
-    walls:[...boxWalls(60,60,360,600), seg(60,360,180,360), seg(300,360,420,360)],
-    tee:{x:240,y:600}, cup:{x:240,y:150},
-    mills:[{x:240,y:360,r:95,sp:0.028,blades:3}],
+    walls:boxWalls(60,60,360,600),
+    tee:{x:240,y:600}, cup:{x:240,y:135},
+    mills:[{x:240,y:360,r:78,sp:0.03,blades:3}],
+    sand:[{x:90,y:330,w:60,h:60},{x:330,y:330,w:60,h:60}],
+    bumpers:[{x:240,y:200,r:13}],
     decor:'links' };
 }
-function H10(){ // Carnoustie 18 "Barry Burn" — the burn crosses twice
-  return { course:'Carnoustie', name:'Barry Burn', hole:18, par:3,
+function H10(){ // Carnoustie "Barry Burn" — the burn crosses twice on opposite bridges
+  return { course:'Carnoustie', name:'Barry Burn', hole:18, par:4,
     fair:[{x:70,y:60,w:340,h:600}],
     walls:boxWalls(70,60,340,600),
-    tee:{x:240,y:600}, cup:{x:240,y:140},
-    water:[{x:70,y:440,w:250,h:40},{x:160,y:280,w:250,h:40}],
-    bridge:[{x:280,y:440,w:40,h:40},{x:160,y:280,w:40,h:40}],
+    tee:{x:240,y:600}, cup:{x:240,y:135},
+    water:[{x:70,y:445,w:250,h:38},{x:160,y:285,w:250,h:38}],
+    bridge:[{x:262,y:445,w:58,h:38},{x:160,y:285,w:58,h:38}],
+    sand:[{x:150,y:180,w:60,h:30},{x:270,y:180,w:60,h:30}],
+    bumpers:[{x:110,y:385,r:13}],
     decor:'links' };
 }
-function H11(){ // The Spinner — a rotating bar deflects the ball
+function H11(){ // The Spinner — a spinning bar guards the gap, bumpers and baffles
   return { course:'Stadium Course', name:'The Spinner', hole:11, par:3,
     fair:[{x:60,y:60,w:360,h:600}],
-    walls:boxWalls(60,60,360,600),
-    tee:{x:240,y:600}, cup:{x:240,y:150},
-    spin:[{x:240,y:360,len:120,sp:0.05}],
-    bumpers:[{x:120,y:240,r:14},{x:360,y:240,r:14}],
+    walls:[...boxWalls(60,60,360,600), seg(60,240,150,240), seg(330,240,420,240)],
+    tee:{x:240,y:600}, cup:{x:240,y:140},
+    spin:[{x:240,y:400,len:118,sp:0.055}],
+    bumpers:[{x:130,y:330,r:14},{x:350,y:330,r:14}],
     decor:'classic' };
 }
-function H12(){ // Riviera 10 — short, central bunker guard + bumper
-  return { course:'Riviera', name:'The Short Ten', hole:10, par:2,
-    fair:[{x:120,y:60,w:240,h:600}],
-    walls:boxWalls(120,60,240,600),
-    tee:{x:240,y:600}, cup:{x:240,y:150},
-    sand:[{x:170,y:220,w:140,h:60}],
-    bumpers:[{x:160,y:150,r:14},{x:320,y:150,r:14}],
+function H12(){ // Riviera 10 — central bunker + a baffle wall forcing a bank to a side cup
+  return { course:'Riviera', name:'The Short Ten', hole:10, par:3,
+    fair:[{x:110,y:60,w:260,h:600}],
+    walls:[...boxWalls(110,60,260,600), seg(190,210,290,210)],
+    tee:{x:240,y:600}, cup:{x:160,y:150},
+    sand:[{x:170,y:260,w:140,h:60}],
+    bumpers:[{x:320,y:170,r:14}],
     decor:'classic' };
 }
-function H13(){ // Bethpage "Fearsome" — long S corridor
+function H13(){ // Bethpage "Fearsome" — long S corridor, bunkers in the bends
   return { course:'Bethpage Black', name:'The Fearsome', hole:4, par:4,
     fair:[{x:60,y:520,w:360,h:140},{x:60,y:340,w:360,h:180},{x:60,y:120,w:360,h:220}],
     walls:[ seg(60,660,420,660), seg(420,660,420,520), seg(420,520,180,520), seg(180,520,180,340),
             seg(180,340,420,340), seg(420,340,420,120), seg(420,120,60,120), seg(60,120,60,340),
             seg(60,340,300,340), seg(300,340,300,520), seg(300,520,60,520), seg(60,520,60,660) ],
-    tee:{x:360,y:600}, cup:{x:140,y:190},
-    sand:[{x:360,y:400,w:40,h:40}],
+    tee:{x:360,y:600}, cup:{x:140,y:185},
+    sand:[{x:360,y:410,w:40,h:40},{x:90,y:410,w:40,h:40}],
+    bumpers:[{x:240,y:430,r:13}],
     decor:'classic' };
 }
-function H14(){ // PGA West "Alcatraz" — island ringed by sand
+function H14(){ // PGA West "Alcatraz" — island ringed by sand, cup in the corner
   return { course:'PGA West', name:'Alcatraz', hole:17, par:3,
-    tee:{x:240,y:610}, cup:{x:240,y:235},
+    tee:{x:240,y:610}, cup:{x:300,y:200},
     walls: boxWalls(30,90,420,580),
     water:[{x:30,y:120,w:420,h:450}],
     land:[{x:150,y:160,w:180,h:175},{x:218,y:333,w:44,h:231},{x:160,y:560,w:160,h:100}],
     sand:[{x:150,y:160,w:180,h:24},{x:150,y:311,w:180,h:24}],
+    bumpers:[{x:185,y:200,r:12}],
     decor:'island' };
 }
-function H15(){ // Bay Hill 18 — water down the right, dogleg
-  return { course:'Bay Hill', name:"Arnie's Finish", hole:18, par:3,
+function H15(){ // Bay Hill 18 — water down the left, dogleg, bunker-guarded cup
+  return { course:'Bay Hill', name:"Arnie's Finish", hole:18, par:4,
     fair:[{x:60,y:60,w:360,h:600}],
     walls:boxWalls(60,60,360,600),
-    tee:{x:140,y:600}, cup:{x:330,y:160},
-    water:[{x:60,y:240,w:150,h:300}],
-    sand:[{x:250,y:200,w:70,h:30}],
-    bumpers:[{x:300,y:430,r:15}],
+    tee:{x:140,y:600}, cup:{x:335,y:150},
+    water:[{x:60,y:220,w:170,h:320}],
+    sand:[{x:250,y:195,w:80,h:32},{x:355,y:210,w:45,h:30}],
+    bumpers:[{x:310,y:430,r:15}],
     decor:'classic' };
 }
-function H16(){ // Muirfield 14 "Meandering Creek" — slope + creek
+function H16(){ // Muirfield 14 — a sidehill slope sweeps you toward the creek
   return { course:'Muirfield Village', name:'Meandering Creek', hole:14, par:3,
     fair:[{x:60,y:60,w:360,h:600}],
     walls:boxWalls(60,60,360,600),
-    tee:{x:140,y:600}, cup:{x:320,y:160},
-    slopes:[{x:60,y:360,w:360,h:160,ax:0.045,ay:0}],
-    water:[{x:60,y:470,w:230,h:36}],
-    bridge:[{x:150,y:470,w:50,h:36}],
+    tee:{x:130,y:600}, cup:{x:330,y:150},
+    slopes:[{x:60,y:330,w:360,h:200,ax:0.05,ay:0}],
+    water:[{x:60,y:470,w:250,h:36}],
+    bridge:[{x:140,y:470,w:50,h:36}],
+    sand:[{x:300,y:210,w:60,h:30}],
     decor:'classic' };
 }
-function H17(){ // Warp Factory — teleporters
-  return { course:'Fantasy Links', name:'The Warp', hole:17, par:2,
+function H17(){ // The Warp — a wall splits the hole; warp across or thread a tiny gap
+  return { course:'Fantasy Links', name:'The Warp', hole:17, par:3,
     fair:[{x:60,y:60,w:360,h:600}],
-    walls:[...boxWalls(60,60,360,600), seg(60,380,200,380), seg(280,380,420,380)],
-    tee:{x:240,y:600}, cup:{x:240,y:150},
-    warps:[{ax:140,ay:470,bx:340,by:250,r:20}],
-    bumpers:[{x:240,y:470,r:14}],
+    walls:[...boxWalls(60,60,360,600), seg(60,360,230,360), seg(300,360,420,360)],
+    tee:{x:240,y:600}, cup:{x:140,y:150},
+    warps:[{ax:140,ay:490,bx:340,by:230,r:20}],
+    bumpers:[{x:300,y:490,r:14},{x:200,y:230,r:13}],
+    sand:[{x:160,y:200,w:70,h:30}],
     decor:'classic' };
 }
-function H18(){ // Augusta 18 "Holly" — uphill dogleg finale, slope + bunkers
+function H18(){ // Augusta 18 "Holly" — uphill dogleg finale: the slope rolls putts back
   return { course:'Augusta National', name:'Holly', hole:18, par:4,
     fair:[{x:60,y:420,w:360,h:240},{x:200,y:120,w:220,h:320}],
     walls:[ seg(60,420,60,660), seg(60,660,420,660), seg(420,660,420,120), seg(420,120,200,120),
             seg(200,120,200,420), seg(200,420,60,420) ],
-    tee:{x:140,y:610}, cup:{x:320,y:185},
-    slopes:[{x:200,y:120,w:220,h:300,ax:0,ay:-0.03}],
-    sand:[{x:240,y:300,w:60,h:30},{x:340,y:230,w:50,h:30}],
-    bumpers:[{x:300,y:430,r:15}],
+    tee:{x:130,y:610}, cup:{x:320,y:170},
+    slopes:[{x:200,y:150,w:220,h:280,ax:0,ay:0.028}],
+    sand:[{x:250,y:300,w:60,h:30},{x:345,y:235,w:50,h:30}],
+    bumpers:[{x:300,y:440,r:14}],
     decor:'azalea' };
 }
 const HOLES = [H01(),H02(),H03(),H04(),H05(),H06(),H07(),H08(),H09(),H10(),H11(),H12(),H13(),H14(),H15(),H16(),H17(),H18()];
