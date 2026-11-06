@@ -526,7 +526,7 @@ function showCard(tiny,big,small,ms){
   document.getElementById('cTiny').textContent=tiny||'';
   document.getElementById('cBig').textContent=big||'';
   document.getElementById('cSmall').textContent=small||'';
-  const c=document.getElementById('card'); c.classList.add('show'); cardTimer=ms||1400;
+  const c=document.getElementById('card'); c.classList.add('show'); cardTimer=Math.round((ms||1400)/16.7);
 }
 
 // ======================================================================
