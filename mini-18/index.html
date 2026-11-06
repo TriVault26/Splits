@@ -274,14 +274,15 @@ function H12(){ // Riviera 10 — central bunker + a baffle wall forcing a bank 
     decor:'classic' };
 }
 function H13(){ // Bethpage "Fearsome" — long S corridor, bunkers in the bends
+  // Outer box x60..420, y120..660. Two baffles with offset gaps make an S:
+  //   lower baffle y470 leaves a gap on the LEFT (x60..150),
+  //   upper baffle y300 leaves a gap on the RIGHT (x330..420).
   return { course:'Bethpage Black', name:'The Fearsome', hole:4, par:4,
-    fair:[{x:60,y:520,w:360,h:140},{x:60,y:340,w:360,h:180},{x:60,y:120,w:360,h:220}],
-    walls:[ seg(60,660,420,660), seg(420,660,420,520), seg(420,520,180,520), seg(180,520,180,340),
-            seg(180,340,420,340), seg(420,340,420,120), seg(420,120,60,120), seg(60,120,60,340),
-            seg(60,340,300,340), seg(300,340,300,520), seg(300,520,60,520), seg(60,520,60,660) ],
+    fair:[{x:60,y:120,w:360,h:540}],
+    walls:[ ...boxWalls(60,120,360,540), seg(150,470,420,470), seg(60,300,330,300) ],
     tee:{x:360,y:600}, cup:{x:140,y:185},
-    sand:[{x:360,y:410,w:40,h:40},{x:90,y:410,w:40,h:40}],
-    bumpers:[{x:240,y:430,r:13}],
+    sand:[{x:200,y:360,w:120,h:40},{x:330,y:520,w:60,h:50}],
+    bumpers:[{x:240,y:400,r:13}],
     decor:'classic' };
 }
 function H14(){ // PGA West "Alcatraz" — island ringed by sand, cup in the corner
