@@ -1,7 +1,7 @@
 // Mini 18 service worker — network-first for the page, cache-first for assets.
 // Network-first on the HTML means a new deploy shows up immediately when online,
 // instead of being pinned to an old cached copy; it still works offline via cache.
-const CACHE = 'mini18-v5';
+const CACHE = 'mini18-v6';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
