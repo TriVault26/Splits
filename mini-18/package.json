@@ -1,0 +1,8 @@
+{
+  "name": "mini-18",
+  "version": "1.0.0",
+  "description": "Mini 18 — mini-golf tributes to the famous holes",
+  "scripts": {
+    "start": "npx serve ."
+  }
+}

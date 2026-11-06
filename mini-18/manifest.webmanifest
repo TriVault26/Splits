@@ -1,0 +1,15 @@
+{
+  "name": "Mini 18 — Famous Holes Putt-Putt",
+  "short_name": "Mini 18",
+  "description": "Mini-golf tributes to the greatest holes in golf: Augusta, Pebble, Sawgrass, St Andrews and more. Walls, water, windmills and warps.",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#07140d",
+  "theme_color": "#0b2e1a",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
