@@ -628,8 +628,10 @@ function draw(){
   ctx.translate(SX,SY); ctx.scale(SC,SC);
 
   drawBackdrop(h);
-  drawWater(h);
-  drawFairway(h);
+  // Island holes: water first, land panels sit on top of it.
+  // Creek/pond holes: fairway first, then water on top so the hazard is visible.
+  if(h.land){ drawWater(h); drawFairway(h); }
+  else { drawFairway(h); drawWater(h); }
   drawSand(h);
   drawSlopes(h);
   drawDecorBits(h);
